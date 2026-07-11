@@ -1,5 +1,7 @@
 name: Build Hermes with OfficeCLI                                                                                                                                   
-on:                                                                                                                                                                 
+on: 
+  schedule:
+    - cron: '0 19 */3 * *'
   push:                                                                                                                                                             
     branches: [main]                                                                                                                                                
     paths:                                                                                                                                                          
