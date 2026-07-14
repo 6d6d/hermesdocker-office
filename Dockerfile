@@ -11,7 +11,7 @@ USER root
 # 明确使用完整全球化支持；不要设为 1，否则中文、日期与区域格式处理可能异常。                                                                                        
 ENV DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=0                                                                                                                         
 RUN set -eux; \                                                                                                                                                     
-  # mkdir -p /root/.hermes; \                                                                                                                                       
+  mkdir -p /root/.hermes; \                                                                                                                                       
   curl -fsSL --retry 3 --retry-all-errors \                                                                                                                       
     https://raw.githubusercontent.com/iOfficeAI/OfficeCLI/main/install.sh \                                                                                       
     -o /tmp/install-officecli.sh; \                                                                                                                               
