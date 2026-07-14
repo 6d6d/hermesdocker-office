@@ -26,9 +26,4 @@ RUN set -eux; \
     /opt/hermes/skills/officecli/SKILL.md; \                                                                                                                      
   rm -rf /tmp/install-officecli.sh /tmp/officecli /tmp/officecli-SHA256SUMS                                                                                     
 #    /root/.local /root/.hermes                                                                                                                                     
-# 2. ！！！非常关键：切回 Hermes 镜像默认的非 root 用户（假设为 hermes）
-# 如果不知道默认用户名，可以不写 USER，但必须在下方通过 chown 修复权限
-USER hermes
-
-# 3. 推荐在容器启动后，或者通过非 root 用户来安全初始化技能
 RUN officecli --version
