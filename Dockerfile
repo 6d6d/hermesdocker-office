@@ -1,5 +1,5 @@
 # https://hub.docker.com/r/nousresearch/hermes-agent/tags
-FROM nousresearch/hermes-agent:v2026.7.7.2                                                                                                                           
+FROM nousresearch/hermes-agent:main                                                                                                                         
 ENV UV_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple
 USER root                                                                                                                                                           
 # 官方安装脚本会在检测到 ~/.hermes 后一并下载 OfficeCLI 的 Hermes skill。                                                                                           
@@ -25,6 +25,7 @@ RUN set -eux; \
   install -D -m 0644 \                                                                                                                                            
     /root/.hermes/skills/officecli/SKILL.md \                                                                                                                     
     /opt/hermes/skills/officecli/SKILL.md; \                                                                                                                      
-  rm -rf /tmp/install-officecli.sh /tmp/officecli /tmp/officecli-SHA256SUMS                                                                                     
-#    /root/.local /root/.hermes                                                                                                                                     
+  rm -rf /tmp/install-officecli.sh /tmp/officecli /tmp/officecli-SHA256SUMS  \
+    /root/.local/bin/officecli
+    /root/.hermes/skills/officecli/                                                                                                                        
 RUN officecli --version
