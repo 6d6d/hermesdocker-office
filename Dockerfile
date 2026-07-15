@@ -1,4 +1,5 @@
-FROM nousresearch/hermes-agent:main                                                                                                                            
+# https://hub.docker.com/r/nousresearch/hermes-agent/tags
+FROM nousresearch/hermes-agent:v2026.7.7.2                                                                                                                           
 ENV UV_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple
 USER root                                                                                                                                                           
 # 官方安装脚本会在检测到 ~/.hermes 后一并下载 OfficeCLI 的 Hermes skill。                                                                                           
