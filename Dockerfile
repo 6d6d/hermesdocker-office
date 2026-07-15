@@ -26,6 +26,5 @@ RUN set -eux; \
     /root/.hermes/skills/officecli/SKILL.md \                                                                                                                     
     /opt/hermes/skills/officecli/SKILL.md; \                                                                                                                      
   rm -rf /tmp/install-officecli.sh /tmp/officecli /tmp/officecli-SHA256SUMS  \
-    /root/.local/bin/officecli
-    /root/.hermes/skills/officecli/                                                                                                                        
+    /root/.local/bin/officecli                                                                                                                       
 RUN officecli --version
