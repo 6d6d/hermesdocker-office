@@ -114,13 +114,7 @@ RUN set -eux; \
     node -e "JSON.parse(require('fs').readFileSync('/opt/playwright-mcp/config.json','utf8')); console.log('config.json OK')"; \
     cat /opt/playwright-mcp/config.json
 
-# ---------------------------------------------------------------------------
-# 6) 启动钩子（幂等，失败只告警、不阻断启动）
-#    编号 03- 排在 02- 之后，确保 01-hermes-setup 已经播种并 chown 过 config.yaml。
-#    它只做：建输出目录 → 探测浏览器 → 缺失时调用 hermes mcp add 注册。
-#    不想自动注册就删掉这一行 COPY，改成启动后手动跑一次里面的命令。
-# ---------------------------------------------------------------------------
-COPY --chmod=0755 03-playwright-cloak /etc/cont-init.d/03-playwright-cloak
+# hermes mcp add playwright --command playwright-mcp --args --config /opt/playwright-mcp/config.json
 
 # ---------------------------------------------------------------------------
 # 构建期自检：任一项失败即构建失败
