@@ -1,17 +1,15 @@
-# Hermes Agent + OfficeCLI + CloakBrowser（Stealth Chromium）+ Playwright MCP
+# Hermes Agent + OfficeCLI + agent-browser + Playwright (Python)
 #
-# 构建上下文里需要有本 Dockerfile 和 03-playwright-cloak 两个文件：
+# 构建上下文里需要有本 Dockerfile：
 #   docker build -t hermes-cloak .
 #
-# 相对上游镜像 nousresearch/hermes-agent:main 的改动，逐段都有注释：
-#   1) apt 依赖：原版的 libssl3 在本镜像（Debian 13 trixie）里叫 libssl3t64，
-#      并补齐 Chromium/Stealth Chromium 的运行库
+# 相对上游镜像 nousresearch/hermes-agent:main 的改动：
+#   1) apt 依赖：原版 libssl3 在 Debian 13 trixie 里叫 libssl3t64，
+#      并补齐 Chromium 无头运行库
 #   2) OfficeCLI 安装段（原样保留）
-#   3) 新增 CloakBrowser：Stealth Chromium，二进制固定在 /opt/cloakbrowser
-#   4) 新增 @playwright/mcp 全局安装（省掉运行时 npx 联网下载）
-#   5) 新增 Playwright MCP 的 config.json，executablePath 指向 CloakBrowser 的 chrome
-#   6) 新增 cont-init.d 启动钩子：幂等地把 MCP server 注册进卷上的 config.yaml
-#      —— 必须运行时注册，因为 /opt/data 是挂载卷，构建期写入会被卷覆盖
+#   3) Playwright（Python）安装 + 全局浏览器路径（关键：hermes 用户要能读）
+#   4) agent-browser（Vercel Labs，npm 全局）
+#   5) 构建期自检
 
 FROM nousresearch/hermes-agent:main
 
@@ -66,63 +64,41 @@ RUN set -eux; \
 RUN officecli --version
 
 # ---------------------------------------------------------------------------
-# 3) CloakBrowser：Stealth Chromium
-#    CLOAKBROWSER_CACHE_DIR 把二进制固定在 /opt/cloakbrowser（不落在 /root，
-#    也不落在会被卷覆盖的 /opt/data）；目录名形如 chromium-<version>[-pro]，
-#    可执行文件是其中的 chrome。
-#    · 不设 license key 时下载免费版（Chromium 146）
-#    · 运行时若传 CLOAKBROWSER_LICENSE_KEY，wrapper 会往这个目录下载 Pro 二进制，
-#      所以这里把 owner 交给 hermes，否则运行时只读会 EACCES（Pro 用户注意）
-#    · 构建机连不上 GitHub Releases 时，可先设 CLOAKBROWSER_DOWNLOAD_URL 指向镜像源
+# 3) Playwright（Python）+ 共享浏览器路径
+#    ⚠ PLAYWRIGHT_BROWSERS_PATH 是关键：
+#      默认装到 /root/.cache/ms-playwright，运行时 hermes 用户读不到，
+#      会报 "Executable doesn't exist"。
+#      固定到 /opt/ms-playwright 并放开读/执行权限。
+#    ⚠ 用 uv pip install 与第 2 行保持同一 Python 环境，
+#      别改成系统 pip，否则 Hermes 里 import playwright 会找不到。
 # ---------------------------------------------------------------------------
-ENV CLOAKBROWSER_CACHE_DIR=/opt/cloakbrowser
+ENV PLAYWRIGHT_BROWSERS_PATH=/opt/ms-playwright
 RUN set -eux; \
-    uv tool install cloakbrowser; \
-    install -m 0755 /root/.local/bin/cloakbrowser /usr/local/bin/cloakbrowser; \
-    cloakbrowser install; \
-    cloakbrowser info; \
-    chown -R hermes:hermes /opt/cloakbrowser; \
-    chmod -R a+rX /opt/cloakbrowser; \
-    CHROME="$(find /opt/cloakbrowser -maxdepth 2 -type f -name chrome | head -n1)"; \
-    test -n "$CHROME"; \
-    test -x "$CHROME"; \
-    printf '%s\n' "$CHROME" > /opt/cloakbrowser/BINARY_PATH; \
-    echo "CloakBrowser binary: $CHROME"
+    uv pip install playwright; \
+    playwright install --with-deps chromium; \
+    chmod -R a+rX /opt/ms-playwright; \
+    echo "--- installed chromium dirs ---"; \
+    find /opt/ms-playwright -maxdepth 2 -type d -name 'chromium*' | head -n 5
 
 # ---------------------------------------------------------------------------
-# 4) Playwright MCP（微软维护）：全局装到 /usr/local，hermes 用户可读，
-#    运行时不必再走 npx 联网下载。node 26 已在镜像里（npm prefix=/usr/local）。
+# 4) agent-browser（Vercel Labs，npm 全局）
+#    默认使用 Chrome for Testing，缓存在 /root/.cache。
+#    装好后把缓存目录放开给 hermes 读，否则运行时 EACCES。
 # ---------------------------------------------------------------------------
-RUN npm install -g --no-audit --no-fund @playwright/mcp@0.0.80 \
+RUN npm install -g --no-audit --no-fund agent-browser \
  && npm cache clean --force
 RUN set -eux; \
-    test -x /usr/local/bin/playwright-mcp; \
-    timeout 30 /usr/local/bin/playwright-mcp --help 2>&1 | head -n 12 || true
-
-# ---------------------------------------------------------------------------
-# 5) Playwright MCP 配置文件
-#    executablePath 用第 3 步探测到的真实路径（不写死版本号）；
-#    outputDir 指向卷内目录，运行时由启动钩子建好并 chown 给 hermes。
-#    launchOptions 是 @playwright/mcp 官方 config schema 里的字段。
-# ---------------------------------------------------------------------------
-RUN set -eux; \
-    mkdir -p /opt/playwright-mcp; \
-    CHROME="$(cat /opt/cloakbrowser/BINARY_PATH)"; \
-    printf '{\n  "browser": {\n    "browserName": "chromium",\n    "launchOptions": {\n      "executablePath": "%s"\n    }\n  },\n  "outputDir": "/opt/data/playwright-mcp/output"\n}\n' "$CHROME" \
-      > /opt/playwright-mcp/config.json; \
-    chmod 0644 /opt/playwright-mcp/config.json; \
-    node -e "JSON.parse(require('fs').readFileSync('/opt/playwright-mcp/config.json','utf8')); console.log('config.json OK')"; \
-    cat /opt/playwright-mcp/config.json
-
-# hermes mcp add playwright --command playwright-mcp --args --config /opt/playwright-mcp/config.json
+    command -v agent-browser; \
+    agent-browser --version || true; \
+    agent-browser install --with-deps || true; \
+    chmod -R a+rX /root/.cache 2>/dev/null || true
 
 # ---------------------------------------------------------------------------
 # 构建期自检：任一项失败即构建失败
 # ---------------------------------------------------------------------------
 RUN set -eux; \
     officecli --version; \
-    cloakbrowser info | head -n 20; \
-    test -x "$(cat /opt/cloakbrowser/BINARY_PATH)"; \
-    test -x /usr/local/bin/playwright-mcp; \
-    grep -q executablePath /opt/playwright-mcp/config.json; \
+    python -c "import playwright; print('playwright OK')"; \
+    ls -d /opt/ms-playwright/chromium* >/dev/null; \
+    test -x "$(command -v agent-browser)"; \
     echo "image self-check OK"
