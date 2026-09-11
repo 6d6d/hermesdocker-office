@@ -1,0 +1,57 @@
+#!/command/with-contenv sh
+# 把 Playwright MCP（底层用 CloakBrowser 的 Stealth Chromium）注册进 Hermes。
+#
+# 为什么必须放在这里而不是 Dockerfile 里：
+#   /opt/data 是挂载卷，config.yaml 由 01-hermes-setup(stage2-hook) 在容器启动时
+#   从 /opt/hermes/cli-config.yaml.example 播种。构建期写 /opt/data 的内容会被
+#   卷覆盖，所以只能在运行时补。
+#
+# 幂等：config.yaml 里已经有 playwright-cloak 就跳过。
+# 失败不影响容器启动（只打警告），注册不成功可以照最后一行手动补。
+#
+# 手动补注册的命令：
+#   hermes mcp add playwright-cloak \
+#     --command /usr/local/bin/playwright-mcp \
+#     --env CLOAKBROWSER_CACHE_DIR=/opt/cloakbrowser \
+#     --args --config /opt/playwright-mcp/config.json --headless --no-sandbox --caps=storage
+
+set -u
+
+HERMES_HOME="${HERMES_HOME:-/opt/data}"
+CONFIG="$HERMES_HOME/config.yaml"
+OUT_DIR="$HERMES_HOME/playwright-mcp"
+CHROME="$(cat /opt/cloakbrowser/BINARY_PATH 2>/dev/null || true)"
+
+# 输出目录与持久 profile 都要在卷上，且归 hermes 所有
+mkdir -p "$OUT_DIR/output" 2>/dev/null || true
+chown -R hermes:hermes "$OUT_DIR" 2>/dev/null || true
+
+if [ ! -f "$CONFIG" ]; then
+    echo "[03-playwright-cloak] 未找到 $CONFIG，本轮回退路径无法注册，跳过"
+    exit 0
+fi
+
+if grep -q '^[[:space:]]\{2,\}playwright-cloak:' "$CONFIG"; then
+    echo "[03-playwright-cloak] playwright-cloak 已注册，跳过"
+    exit 0
+fi
+
+if [ -z "$CHROME" ] || [ ! -x "$CHROME" ]; then
+    echo "[03-playwright-cloak] 找不到可执行的 CloakBrowser 二进制（$CHROME），跳过" >&2
+    exit 0
+fi
+
+# /opt/hermes/bin/hermes 是权限堕落 shim：以 root 调用时自动切到 hermes 用户，
+# 这样写出来的 config.yaml 仍是 hermes:hermes，不会让 gateway 读不到。
+if timeout 90 /opt/hermes/bin/hermes mcp add playwright-cloak \
+      --command /usr/local/bin/playwright-mcp \
+      --env CLOAKBROWSER_CACHE_DIR=/opt/cloakbrowser \
+      --connect-timeout 30 \
+      --args --config /opt/playwright-mcp/config.json --headless --no-sandbox --caps=storage
+then
+    echo "[03-playwright-cloak] 注册成功，重启容器后工具名前缀为 mcp_playwright_cloak_"
+else
+    echo "[03-playwright-cloak] hermes mcp add 失败（网络/浏览器启动问题），可手动执行本文件末尾那条命令" >&2
+fi
+
+exit 0
