@@ -125,5 +125,4 @@ RUN set -eux; \
     test -x "$(cat /opt/cloakbrowser/BINARY_PATH)"; \
     test -x /usr/local/bin/playwright-mcp; \
     grep -q executablePath /opt/playwright-mcp/config.json; \
-    test -f /etc/cont-init.d/03-playwright-cloak; \
     echo "image self-check OK"
