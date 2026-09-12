@@ -45,6 +45,35 @@ ENV NPM_CONFIG_REGISTRY=https://registry.npmmirror.com
 # `uv pip install` 依赖运行期 VIRTUAL_ENV 的行为差异）
 ENV HERMES_VENV=/opt/hermes/.venv
 
+# -----------------------------------------------------------------------------
+# 0.1) 构建期 HTTP 代理（可选，默认不启用）
+#
+#   ⚠ 构建同样跑在容器里，所以 127.0.0.1 在这里指向「构建容器」自己的 loopback，
+#     不是宿主机。要让构建走宿主机的 127.0.0.1:23333，二选一：
+#
+#     a) 让宿主代理监听 0.0.0.0，然后用桥接网关地址：
+#          docker build -t hermes-cloak \
+#            --build-arg HTTP_PROXY=http://172.20.0.1:23333 \
+#            --build-arg HTTPS_PROXY=http://172.20.0.1:23333 .
+#
+#     b) 用宿主网络构建，此时 127.0.0.1 才真的指向宿主机：
+#          docker build -t hermes-cloak --network=host \
+#            --build-arg HTTP_PROXY=http://127.0.0.1:23333 \
+#            --build-arg HTTPS_PROXY=http://127.0.0.1:23333 .
+#
+#   不传 --build-arg 时这些变量为空，构建照常直连，互不影响。
+#   注意：构建期若启用了代理，uv 访问 aliyun 也会绕经代理；若代理对国内站点
+#   反而更慢，把镜像域名加进 NO_PROXY：
+#          --build-arg NO_PROXY=localhost,127.0.0.1,mirrors.aliyun.com
+#
+#   （这组 ARG 只作用于构建期，不会写进最终镜像的 ENV；
+#     运行期代理请在 docker-compose.yml 里配。）
+# -----------------------------------------------------------------------------
+ARG HTTP_PROXY
+ARG HTTPS_PROXY
+ARG NO_PROXY
+
+
 USER root
 
 RUN uv pip install --python ${HERMES_VENV}/bin/python --upgrade lark-oapi python-telegram-bot
