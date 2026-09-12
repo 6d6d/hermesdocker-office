@@ -75,28 +75,24 @@ USER root
 
 # 依赖安装。
 #
-# ⚠ 这一行的两个历史坑：
-#   1) 曾写成 `--python ${HERMES_VENV}/bin/python`。构建时该变量空展开，
-#      命令退化成 `--python /bin/python`（/bin -> /usr/bin），撞上系统 Python 的
-#      PEP 668 externally-managed 保护，报 "environment at: /usr"，exit 2。
-#   2) 随后改成字面路径 + `test -x ... || exit 1` 守卫。守卫本身若判定失败，
-#      会直接 `exit 1`，而 buildx 只回显命令、不回显 stdout，
-#      于是真正的失败原因被那句 exit 1 完全遮蔽。
+# ⚠ 历史坑记录（这一层前后失败过多次，根因各不相同）：
+#   1) `--python ${HERMES_VENV}/bin/python` —— 变量空展开退化成 /bin/python，
+#      撞上系统 Python 的 PEP 668 保护（exit 2）。
+#   2) 字面路径 + `test -x ... || exit 1` 守卫 —— 守卫本身掩盖真实报错。
+#   3) 一长串诊断命令 —— 引入过多失败面。
+#   4) `--upgrade` —— 强制取最新版，最容易与基线镜像里已钉住的依赖冲突。
 #
-# 现在：用 ${VIRTUAL_ENV:-/opt/hermes/.venv} 兜底展开，绝不会退化成空；
-#       并且每一步都 echo 出环境信息，失败时能从构建日志直接读出原因。
+# 退出码指纹（实测）：
+#   2 = 网络/路径/权限/解释器问题；1 = 依赖解析无解（No solution found）。
+#   所以看到 exit 1 就该去日志里搜 "No solution found when resolving dependencies"。
+#
+# 这里去掉 --upgrade：只在缺失时安装，已有则不动，避免和基线镜像打架。
+# 若确实需要升级到特定版本，请显式钉版本，例如：
+#   uv pip install "lark-oapi==1.7.3" "python-telegram-bot==22.8"
 RUN set -eux; \
-    echo "===== 构建环境诊断 ====="; \
-    echo "PATH=$PATH"; \
-    command -v uv && uv --version; \
     VENV="${VIRTUAL_ENV:-/opt/hermes/.venv}"; \
-    echo "解析出的 venv: $VENV"; \
-    ls -la "$VENV/bin/" | head -20; \
-    PY="$VENV/bin/python"; \
-    echo "使用解释器: $PY"; \
-    "$PY" -c "import sys; print('解释器版本:', sys.version)"; \
-    uv pip install --python "$PY" --upgrade lark-oapi python-telegram-bot; \
-    "$PY" -c "import lark_oapi, telegram; print('lark-oapi / python-telegram-bot OK')"
+    echo "VIRTUAL_ENV=${VIRTUAL_ENV:-<unset>}  ->  使用解释器 $VENV/bin/python"; \
+    uv pip install --python "$VENV/bin/python" lark-oapi python-telegram-bot
 
 # -----------------------------------------------------------------------------
 # 1) 系统依赖
