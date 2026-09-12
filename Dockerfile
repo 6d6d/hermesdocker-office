@@ -52,40 +52,52 @@ ENV NPM_CONFIG_REGISTRY=https://registry.npmmirror.com
 #   现在不依赖任何变量，从根上消除这类故障。
 
 # -----------------------------------------------------------------------------
-# 0.1) 构建期 HTTP 代理（可选，默认不启用）
+# 0.1) 构建期代理：刻意不声明 ARG
 #
-#   ⚠ 构建同样跑在容器里，所以 127.0.0.1 在这里指向「构建容器」自己的 loopback，
-#     不是宿主机。要让构建走宿主机的 127.0.0.1:23333，二选一：
+#   ⚠ 这里曾经有 `ARG HTTP_PROXY / ARG HTTPS_PROXY / ARG NO_PROXY`，已删除。
 #
-#     a) 让宿主代理监听 0.0.0.0，然后用桥接网关地址：
-#          docker build -t hermes-cloak \
-#            --build-arg HTTP_PROXY=http://172.20.0.1:23333 \
-#            --build-arg HTTPS_PROXY=http://172.20.0.1:23333 .
+#   原因：Docker 会把【构建客户端环境】里的 HTTP_PROXY/HTTPS_PROXY 自动注入
+#   到构建中，前提正是 Dockerfile 里声明了同名 ARG。一旦被注入，
+#   构建容器里的 127.0.0.1:23333 指向的是【构建容器自己】而非宿主机，
+#   uv 访问镜像源就会连不上（Connection refused）。
 #
-#     b) 用宿主网络构建，此时 127.0.0.1 才真的指向宿主机：
-#          docker build -t hermes-cloak --network=host \
-#            --build-arg HTTP_PROXY=http://127.0.0.1:23333 \
-#            --build-arg HTTPS_PROXY=http://127.0.0.1:23333 .
+#   本构建不需要代理：第 0 节选用的 aliyun 源可直连（实测解析 104 包）。
+#   不声明 ARG，就不会有任何代理变量被悄悄带进构建。
 #
-#   不传 --build-arg 时这些变量为空，构建照常直连，互不影响。
-#   注意：构建期若启用了代理，uv 访问 aliyun 也会绕经代理；若代理对国内站点
-#   反而更慢，把镜像域名加进 NO_PROXY：
-#          --build-arg NO_PROXY=localhost,127.0.0.1,mirrors.aliyun.com
-#
-#   （这组 ARG 只作用于构建期，不会写进最终镜像的 ENV；
-#     运行期代理请在 docker-compose.yml 里配。）
+#   若某天确实需要构建期代理，不要加回 ARG，改用 buildx 的显式注入：
+#     docker buildx build --network=host \
+#       --build-arg HTTP_PROXY=http://127.0.0.1:23333 \
+#       --build-arg HTTPS_PROXY=http://127.0.0.1:23333 .
+#   （--network=host 时 127.0.0.1 才真的指向宿主机）
 # -----------------------------------------------------------------------------
-ARG HTTP_PROXY
-ARG HTTPS_PROXY
-ARG NO_PROXY
 
 USER root
 
+# 依赖安装。
+#
+# ⚠ 这一行的两个历史坑：
+#   1) 曾写成 `--python ${HERMES_VENV}/bin/python`。构建时该变量空展开，
+#      命令退化成 `--python /bin/python`（/bin -> /usr/bin），撞上系统 Python 的
+#      PEP 668 externally-managed 保护，报 "environment at: /usr"，exit 2。
+#   2) 随后改成字面路径 + `test -x ... || exit 1` 守卫。守卫本身若判定失败，
+#      会直接 `exit 1`，而 buildx 只回显命令、不回显 stdout，
+#      于是真正的失败原因被那句 exit 1 完全遮蔽。
+#
+# 现在：用 ${VIRTUAL_ENV:-/opt/hermes/.venv} 兜底展开，绝不会退化成空；
+#       并且每一步都 echo 出环境信息，失败时能从构建日志直接读出原因。
 RUN set -eux; \
-    test -x /opt/hermes/.venv/bin/python || { \
-      echo "FATAL: /opt/hermes/.venv/bin/python 不存在 —— 基线镜像的 venv 路径可能已变"; exit 1; }; \
-    uv pip install --python /opt/hermes/.venv/bin/python --upgrade lark-oapi python-telegram-bot; \
-    /opt/hermes/.venv/bin/python -c "import lark_oapi, telegram; print('lark-oapi / python-telegram-bot OK')"
+    echo "===== 构建环境诊断 ====="; \
+    echo "VIRTUAL_ENV=${VIRTUAL_ENV:-<unset>}"; \
+    echo "PATH=$PATH"; \
+    command -v uv && uv --version; \
+    VENV="${VIRTUAL_ENV:-/opt/hermes/.venv}"; \
+    echo "解析出的 venv: $VENV"; \
+    ls -la "$VENV/bin/" | head -20; \
+    PY="$VENV/bin/python"; \
+    echo "使用解释器: $PY"; \
+    "$PY" -c "import sys; print('解释器版本:', sys.version)"; \
+    uv pip install --python "$PY" --upgrade lark-oapi python-telegram-bot; \
+    "$PY" -c "import lark_oapi, telegram; print('lark-oapi / python-telegram-bot OK')"
 
 # -----------------------------------------------------------------------------
 # 1) 系统依赖
