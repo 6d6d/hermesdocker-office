@@ -87,7 +87,6 @@ USER root
 #       并且每一步都 echo 出环境信息，失败时能从构建日志直接读出原因。
 RUN set -eux; \
     echo "===== 构建环境诊断 ====="; \
-    echo "VIRTUAL_ENV=${VIRTUAL_ENV:-<unset>}"; \
     echo "PATH=$PATH"; \
     command -v uv && uv --version; \
     VENV="${VIRTUAL_ENV:-/opt/hermes/.venv}"; \
