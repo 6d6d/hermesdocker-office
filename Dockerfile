@@ -80,18 +80,6 @@ RUN set -eux; \
     echo "--- installed chromium dirs ---"; \
     find /opt/ms-playwright -maxdepth 2 -type d -name 'chromium*' | head -n 5
 
-# ---------------------------------------------------------------------------
-# 4) agent-browser（Vercel Labs，npm 全局）
-#    默认使用 Chrome for Testing，缓存在 /root/.cache。
-#    装好后把缓存目录放开给 hermes 读，否则运行时 EACCES。
-# ---------------------------------------------------------------------------
-RUN npm install -g --no-audit --no-fund agent-browser \
- && npm cache clean --force
-RUN set -eux; \
-    command -v agent-browser; \
-    agent-browser --version || true; \
-    agent-browser install --with-deps || true; \
-    chmod -R a+rX /root/.cache 2>/dev/null || true
 
 # ---------------------------------------------------------------------------
 # 构建期自检：任一项失败即构建失败
@@ -100,5 +88,4 @@ RUN set -eux; \
     officecli --version; \
     python -c "import playwright; print('playwright OK')"; \
     ls -d /opt/ms-playwright/chromium* >/dev/null; \
-    test -x "$(command -v agent-browser)"; \
     echo "image self-check OK"
