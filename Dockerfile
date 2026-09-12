@@ -41,9 +41,15 @@ FROM nousresearch/hermes-agent:main
 ENV UV_INDEX_URL=https://mirrors.aliyun.com/pypi/simple/
 ENV NPM_CONFIG_REGISTRY=https://registry.npmmirror.com
 
-# Hermes 运行用的解释器（PLAYWRIGHT_BROWSERS_PATH 之外，显式指定可避免
-# `uv pip install` 依赖运行期 VIRTUAL_ENV 的行为差异）
-ENV HERMES_VENV=/opt/hermes/.venv
+# Hermes 运行用的解释器：一律写死字面路径 /opt/hermes/.venv/bin/python。
+#
+# ⚠ 踩过的坑：这里原先用 `ENV HERMES_VENV=/opt/hermes/.venv`，
+#   再以 `${HERMES_VENV}/bin/python` 引用。构建时该变量展开为空，
+#   命令退化成 `--python /bin/python`（Debian 上 /bin -> /usr/bin，
+#   所以 uv 报 "environment at: /usr"），撞上 PEP 668
+#   externally-managed-environment 拒绝安装，构建失败（exit code 1）。
+#   表面像"源/网络问题"，实际是变量展开问题。
+#   现在不依赖任何变量，从根上消除这类故障。
 
 # -----------------------------------------------------------------------------
 # 0.1) 构建期 HTTP 代理（可选，默认不启用）
@@ -73,10 +79,13 @@ ARG HTTP_PROXY
 ARG HTTPS_PROXY
 ARG NO_PROXY
 
-
 USER root
 
-RUN uv pip install --python ${HERMES_VENV}/bin/python --upgrade lark-oapi python-telegram-bot
+RUN set -eux; \
+    test -x /opt/hermes/.venv/bin/python || { \
+      echo "FATAL: /opt/hermes/.venv/bin/python 不存在 —— 基线镜像的 venv 路径可能已变"; exit 1; }; \
+    uv pip install --python /opt/hermes/.venv/bin/python --upgrade lark-oapi python-telegram-bot; \
+    /opt/hermes/.venv/bin/python -c "import lark_oapi, telegram; print('lark-oapi / python-telegram-bot OK')"
 
 # -----------------------------------------------------------------------------
 # 1) 系统依赖
@@ -136,7 +145,7 @@ RUN officecli --version
 ENV PLAYWRIGHT_BROWSERS_PATH=/opt/ms-playwright
 ENV PLAYWRIGHT_VERSION=1.62.0
 RUN set -eux; \
-    uv pip install --python ${HERMES_VENV}/bin/python "playwright==${PLAYWRIGHT_VERSION}"; \
+    uv pip install --python /opt/hermes/.venv/bin/python "playwright==${PLAYWRIGHT_VERSION}"; \
     playwright install chromium; \
     chmod -R a+rX /opt/ms-playwright; \
     echo "--- installed chromium dirs ---"; \
@@ -196,14 +205,14 @@ RUN set -eux; \
     echo "=== OfficeCLI ==="; \
     officecli --version; \
     echo "=== Python / Playwright ==="; \
-    ${HERMES_VENV}/bin/python -c "import playwright, sys; print('playwright OK at', sys.executable)"; \
+    /opt/hermes/.venv/bin/python -c "import playwright, sys; print('playwright OK at', sys.executable)"; \
     echo "=== Chromium 二进制 ==="; \
     B="$(ls -d /opt/ms-playwright/chromium-*/chrome-linux64/chrome | head -1)"; \
     test -x "$B"; \
     ldd "$B" | (! grep -q 'not found'); \
     "$B" --version; \
     echo "=== Chromium 真实启动 ==="; \
-    ${HERMES_VENV}/bin/python -c "\
+    /opt/hermes/.venv/bin/python -c "\
 from playwright.sync_api import sync_playwright as S;\
 p=S().start(); b=p.chromium.launch(args=['--no-sandbox']);\
 pg=b.new_page(); pg.goto('data:text/html,<h1>ok</h1>');\
