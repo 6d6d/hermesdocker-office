@@ -89,7 +89,7 @@ USER root
 # 这里去掉 --upgrade：只在缺失时安装，已有则不动，避免和基线镜像打架。
 # 若确实需要升级到特定版本，请显式钉版本，例如：
 #   uv pip install "lark-oapi==1.7.3" "python-telegram-bot==22.8"
-ENV UV_EXCLUDE_NEWER=false
+ENV UV_EXCLUDE_NEWER=9999-12-31T23:59:59Z
 RUN uv pip install --upgrade "lark-oapi==1.7.3" "python-telegram-bot==22.8"
 
 # -----------------------------------------------------------------------------
@@ -150,7 +150,6 @@ RUN officecli --version
 ENV PLAYWRIGHT_BROWSERS_PATH=/opt/ms-playwright
 ENV PLAYWRIGHT_VERSION=1.62.0
 RUN set -eux; \
-    UV_EXCLUDE_NEWER="$(date -u -d '1 day ago' +%Y-%m-%dT%H:%M:%SZ)" \
     uv pip install --exclude-newer-package "playwright=false" --python /opt/hermes/.venv/bin/python "playwright==${PLAYWRIGHT_VERSION}"; \
     playwright install chromium; \
     chmod -R a+rX /opt/ms-playwright; \
