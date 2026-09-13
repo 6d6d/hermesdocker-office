@@ -90,9 +90,7 @@ USER root
 # 若确实需要升级到特定版本，请显式钉版本，例如：
 #   uv pip install "lark-oapi==1.7.3" "python-telegram-bot==22.8"
 RUN set -eux; \
-    VENV="${VIRTUAL_ENV:-/opt/hermes/.venv}"; \
-    echo "VIRTUAL_ENV=${VIRTUAL_ENV:-<unset>}  ->  使用解释器 $VENV/bin/python"; \
-    uv pip install --python "$VENV/bin/python" lark-oapi python-telegram-bot
+    uv pip install --python "/opt/hermes/.venv/bin/python" lark-oapi python-telegram-bot
 
 # -----------------------------------------------------------------------------
 # 1) 系统依赖
