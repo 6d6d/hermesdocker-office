@@ -146,9 +146,9 @@ RUN officecli --version
 #    ⚠ 显式 --python 指向 Hermes venv，官方镜像的系统 python3 是 import 不到 playwright 的。
 # -----------------------------------------------------------------------------
 ENV PLAYWRIGHT_BROWSERS_PATH=/opt/ms-playwright
-ENV PLAYWRIGHT_VERSION=1.62.0
+# ENV PLAYWRIGHT_VERSION=1.62.0 "playwright==${PLAYWRIGHT_VERSION}"
 RUN set -eux; \
-    uv pip install --exclude-newer-package "playwright=false" --python /opt/hermes/.venv/bin/python "playwright==${PLAYWRIGHT_VERSION}"; \
+    uv pip install --exclude-newer-package "playwright=false" playwright; \
     playwright install chromium; \
     chmod -R a+rX /opt/ms-playwright; \
     echo "--- installed chromium dirs ---"; \
@@ -208,7 +208,7 @@ RUN set -eux; \
     echo "=== OfficeCLI ==="; \
     officecli --version; \
     echo "=== Python / Playwright ==="; \
-    /opt/hermes/.venv/bin/python -c "import playwright, sys; print('playwright OK at', sys.executable)"; \
+    python -c "import playwright, sys; print('playwright OK at', sys.executable)"; \
 #     echo "=== Chromium 二进制 ==="; \
 #     B="$(find /opt/ms-playwright -type f \( -name chrome -o -name headless_shell \) 2>/dev/null | head -1)"
 #     test -n "$B" || { echo "no chromium binary found"; ls -laR /opt/ms-playwright; exit 1; }
