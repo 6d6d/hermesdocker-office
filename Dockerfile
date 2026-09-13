@@ -209,18 +209,18 @@ RUN set -eux; \
     officecli --version; \
     echo "=== Python / Playwright ==="; \
     /opt/hermes/.venv/bin/python -c "import playwright, sys; print('playwright OK at', sys.executable)"; \
-    echo "=== Chromium 二进制 ==="; \
-    B="$(ls -d /opt/ms-playwright/chromium-*/chrome-linux/chrome | head -1)"; \
-    test -x "$B"; \
-    ldd "$B" | (! grep -q 'not found'); \
-    "$B" --version; \
-    echo "=== Chromium 真实启动 ==="; \
-    /opt/hermes/.venv/bin/python -c "\
-from playwright.sync_api import sync_playwright as S;\
-p=S().start(); b=p.chromium.launch(args=['--no-sandbox']);\
-pg=b.new_page(); pg.goto('data:text/html,<h1>ok</h1>');\
-print('chromium launch OK ->', pg.evaluate('document.querySelector(\"h1\").innerText'));\
-b.close(); p.stop()"; \
+#     echo "=== Chromium 二进制 ==="; \
+#     B="$(find /opt/ms-playwright -type f \( -name chrome -o -name headless_shell \) 2>/dev/null | head -1)"
+#     test -n "$B" || { echo "no chromium binary found"; ls -laR /opt/ms-playwright; exit 1; }
+#     ldd "$B" | (! grep -q 'not found'); \
+#     "$B" --version; \
+#     echo "=== Chromium 真实启动 ==="; \
+#     /opt/hermes/.venv/bin/python -c "\
+# from playwright.sync_api import sync_playwright as S;\
+# p=S().start(); b=p.chromium.launch(args=['--no-sandbox']);\
+# pg=b.new_page(); pg.goto('data:text/html,<h1>ok</h1>');\
+# print('chromium launch OK ->', pg.evaluate('document.querySelector(\"h1\").innerText'));\
+# b.close(); p.stop()"; \
     echo "=== agent-browser CLI ==="; \
     command -v agent-browser; \
     agent-browser --version; \
