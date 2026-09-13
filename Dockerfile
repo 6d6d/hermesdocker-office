@@ -88,7 +88,7 @@ USER root
 # 这里去掉 --upgrade：只在缺失时安装，已有则不动，避免和基线镜像打架。
 # 若确实需要升级到特定版本，请显式钉版本，例如：
 #   uv pip install "lark-oapi==1.7.3" "python-telegram-bot==22.8"
-# RUN uv pip install --upgrade lark-oapi python-telegram-bot
+RUN uv pip install --upgrade lark-oapi python-telegram-bot
 
 # -----------------------------------------------------------------------------
 # 1) 系统依赖
@@ -134,6 +134,16 @@ RUN set -eux; \
     /root/.local/bin/officecli
 RUN officecli --version
 
+
+RUN set -eux; \
+    B="$(ls -d /opt/ms-playwright/chromium-*/chrome-linux64/chrome | head -1)"; \
+    test -x "$B"; \
+    ln -sf "$B" /usr/bin/google-chrome; \
+    ln -sf "$B" /usr/bin/google-chrome-stable; \
+    ln -sf "$B" /usr/bin/chromium; \
+    ln -sf "$B" /usr/bin/chromium-browser; \
+    "$B" --version; \
+    
 # -----------------------------------------------------------------------------
 # 3) Playwright（Python）+ 共享浏览器路径
 #    ⚠ PLAYWRIGHT_BROWSERS_PATH 是必须的：默认会去找
