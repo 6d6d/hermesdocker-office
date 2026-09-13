@@ -158,7 +158,7 @@ RUN set -eux; \
 RUN set -eux; \
     ls -la /opt/ms-playwright; \
     find /opt/ms-playwright -maxdepth 4 -type f \( -name chrome -o -name headless_shell \) -print; \
-    B="$(ls -d /opt/ms-playwright/chromium-*/chrome-linux64/chrome | head -1)"; \
+    B="$(find /opt/ms-playwright -maxdepth 4 -type f ( -name chrome -o -name headless_shell ))"; \
     test -x "$B"; \
     ln -sf "$B" /usr/bin/google-chrome; \
     ln -sf "$B" /usr/bin/google-chrome-stable; \
