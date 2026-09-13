@@ -89,7 +89,7 @@ USER root
 # 这里去掉 --upgrade：只在缺失时安装，已有则不动，避免和基线镜像打架。
 # 若确实需要升级到特定版本，请显式钉版本，例如：
 #   uv pip install "lark-oapi==1.7.3" "python-telegram-bot==22.8"
-ENV UV_EXCLUDE_NEWER=9999-12-31T23:59:59Z
+ENV UV_EXCLUDE_NEWER=2027-12-31T23:59:59Z
 RUN uv pip install --upgrade "lark-oapi==1.7.3" "python-telegram-bot==22.8"
 
 # -----------------------------------------------------------------------------
