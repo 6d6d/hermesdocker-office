@@ -38,8 +38,6 @@ FROM nousresearch/hermes-agent:main
 #     导致 uvx/uv 在「运行期」解析失败 —— browser_exec 整个工具直接不可用，
 #     且 `hermes tools` 的安装按钮（UV_NO_CONFIG=1 + 继承环境变量）也无法自救。
 # -----------------------------------------------------------------------------
-ENV UV_INDEX_URL=https://mirrors.aliyun.com/pypi/simple/
-ENV NPM_CONFIG_REGISTRY=https://registry.npmmirror.com
 ENV UV_EXCLUDE_NEWER=2027-12-31T23:59:59Z
 
 # Hermes 运行用的解释器：一律写死字面路径 /opt/hermes/.venv/bin/python。
