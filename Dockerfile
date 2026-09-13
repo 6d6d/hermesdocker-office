@@ -40,6 +40,7 @@ FROM nousresearch/hermes-agent:main
 # -----------------------------------------------------------------------------
 ENV UV_INDEX_URL=https://mirrors.aliyun.com/pypi/simple/
 ENV NPM_CONFIG_REGISTRY=https://registry.npmmirror.com
+ENV UV_EXCLUDE_NEWER=false
 
 # Hermes 运行用的解释器：一律写死字面路径 /opt/hermes/.venv/bin/python。
 #
@@ -89,10 +90,7 @@ USER root
 # 这里去掉 --upgrade：只在缺失时安装，已有则不动，避免和基线镜像打架。
 # 若确实需要升级到特定版本，请显式钉版本，例如：
 #   uv pip install "lark-oapi==1.7.3" "python-telegram-bot==22.8"
-RUN uv pip install \
-      --exclude-newer-package "lark-oapi=false" \
-      --exclude-newer-package "python-telegram-bot=false" \
-      --upgrade lark-oapi python-telegram-bot
+RUN uv pip install --upgrade lark-oapi python-telegram-bot --prerelease=allow 
 
 # -----------------------------------------------------------------------------
 # 1) 系统依赖
