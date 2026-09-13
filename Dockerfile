@@ -90,10 +90,9 @@ USER root
 # 若确实需要升级到特定版本，请显式钉版本，例如：
 #   uv pip install "lark-oapi==1.7.3" "python-telegram-bot==22.8"
 RUN uv pip install --system \
-      --exclude-newer-package "playwright=false" \
       --exclude-newer-package "lark-oapi=false" \
-      --exclude-newer-package "python-telegram-bot=false" 
-RUN uv pip install --upgrade lark-oapi python-telegram-bot
+      --exclude-newer-package "python-telegram-bot=false" \
+      --upgrade lark-oapi python-telegram-bot
 
 # -----------------------------------------------------------------------------
 # 1) 系统依赖
@@ -153,7 +152,7 @@ RUN officecli --version
 ENV PLAYWRIGHT_BROWSERS_PATH=/opt/ms-playwright
 ENV PLAYWRIGHT_VERSION=1.62.0
 RUN set -eux; \
-    uv pip install --python /opt/hermes/.venv/bin/python "playwright==${PLAYWRIGHT_VERSION}"; \
+    uv pip install --exclude-newer-package "playwright=false" --python /opt/hermes/.venv/bin/python "playwright==${PLAYWRIGHT_VERSION}"; \
     playwright install chromium; \
     chmod -R a+rX /opt/ms-playwright; \
     echo "--- installed chromium dirs ---"; \
