@@ -134,16 +134,6 @@ RUN set -eux; \
     /root/.local/bin/officecli
 RUN officecli --version
 
-
-RUN set -eux; \
-    B="$(ls -d /opt/ms-playwright/chromium-*/chrome-linux64/chrome | head -1)"; \
-    test -x "$B"; \
-    ln -sf "$B" /usr/bin/google-chrome; \
-    ln -sf "$B" /usr/bin/google-chrome-stable; \
-    ln -sf "$B" /usr/bin/chromium; \
-    ln -sf "$B" /usr/bin/chromium-browser; \
-    "$B" --version; \
-    
 # -----------------------------------------------------------------------------
 # 3) Playwright（Python）+ 共享浏览器路径
 #    ⚠ PLAYWRIGHT_BROWSERS_PATH 是必须的：默认会去找
@@ -164,6 +154,15 @@ RUN set -eux; \
     echo "--- installed chromium dirs ---"; \
     find /opt/ms-playwright -maxdepth 2 -type d -name 'chromium*' | head -n 5
 
+RUN set -eux; \
+    B="$(ls -d /opt/ms-playwright/chromium-*/chrome-linux64/chrome | head -1)"; \
+    test -x "$B"; \
+    ln -sf "$B" /usr/bin/google-chrome; \
+    ln -sf "$B" /usr/bin/google-chrome-stable; \
+    ln -sf "$B" /usr/bin/chromium; \
+    ln -sf "$B" /usr/bin/chromium-browser; \
+    "$B" --version; \
+    
 # -----------------------------------------------------------------------------
 # 4) agent-browser（Vercel Labs，npm 全局）
 #    版本与 Hermes 源码钉版保持一致：
