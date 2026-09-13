@@ -40,8 +40,7 @@ FROM nousresearch/hermes-agent:main
 # -----------------------------------------------------------------------------
 ENV UV_INDEX_URL=https://mirrors.aliyun.com/pypi/simple/
 ENV NPM_CONFIG_REGISTRY=https://registry.npmmirror.com
-ENV UV_EXCLUDE_NEWER=false
-
+ENV UV_EXCLUDE_NEWER="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 # Hermes 运行用的解释器：一律写死字面路径 /opt/hermes/.venv/bin/python。
 #
 # ⚠ 踩过的坑：这里原先用 `ENV HERMES_VENV=/opt/hermes/.venv`，
