@@ -40,7 +40,7 @@ FROM nousresearch/hermes-agent:main
 # -----------------------------------------------------------------------------
 ENV UV_INDEX_URL=https://mirrors.aliyun.com/pypi/simple/
 ENV NPM_CONFIG_REGISTRY=https://registry.npmmirror.com
-RUN UV_EXCLUDE_NEWER="$(date -u -d '1 day ago' +%Y-%m-%dT%H:%M:%SZ)"
+
 # Hermes 运行用的解释器：一律写死字面路径 /opt/hermes/.venv/bin/python。
 #
 # ⚠ 踩过的坑：这里原先用 `ENV HERMES_VENV=/opt/hermes/.venv`，
@@ -89,7 +89,8 @@ USER root
 # 这里去掉 --upgrade：只在缺失时安装，已有则不动，避免和基线镜像打架。
 # 若确实需要升级到特定版本，请显式钉版本，例如：
 #   uv pip install "lark-oapi==1.7.3" "python-telegram-bot==22.8"
-RUN uv pip install --upgrade lark-oapi python-telegram-bot --prerelease=allow 
+RUN UV_EXCLUDE_NEWER="$(date -u -d '1 day ago' +%Y-%m-%dT%H:%M:%SZ)" \
+    uv pip install --upgrade "lark-oapi==1.7.3" "python-telegram-bot==22.8"
 
 # -----------------------------------------------------------------------------
 # 1) 系统依赖
@@ -149,6 +150,7 @@ RUN officecli --version
 ENV PLAYWRIGHT_BROWSERS_PATH=/opt/ms-playwright
 ENV PLAYWRIGHT_VERSION=1.62.0
 RUN set -eux; \
+    UV_EXCLUDE_NEWER="$(date -u -d '1 day ago' +%Y-%m-%dT%H:%M:%SZ)" \
     uv pip install --exclude-newer-package "playwright=false" --python /opt/hermes/.venv/bin/python "playwright==${PLAYWRIGHT_VERSION}"; \
     playwright install chromium; \
     chmod -R a+rX /opt/ms-playwright; \
