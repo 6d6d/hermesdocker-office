@@ -210,7 +210,7 @@ RUN set -eux; \
     echo "=== Python / Playwright ==="; \
     /opt/hermes/.venv/bin/python -c "import playwright, sys; print('playwright OK at', sys.executable)"; \
     echo "=== Chromium 二进制 ==="; \
-    B="$(ls -d /opt/ms-playwright/chromium-*/chrome | head -1)"; \
+    B="$(ls -d /opt/ms-playwright/chromium-*/chrome-linux/chrome | head -1)"; \
     test -x "$B"; \
     ldd "$B" | (! grep -q 'not found'); \
     "$B" --version; \
