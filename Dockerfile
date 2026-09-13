@@ -145,6 +145,7 @@ RUN officecli --version
 #      --with-deps 会再跑一遍 apt-get，重复且易与 rm -rf apt/lists 冲突。
 #    ⚠ 显式 --python 指向 Hermes venv，官方镜像的系统 python3 是 import 不到 playwright 的。
 # -----------------------------------------------------------------------------
+
 ENV PLAYWRIGHT_BROWSERS_PATH=/opt/ms-playwright
 # ENV PLAYWRIGHT_VERSION=1.62.0 "playwright==${PLAYWRIGHT_VERSION}"
 RUN set -eux; \
@@ -161,7 +162,7 @@ RUN set -eux; \
     ln -sf "$B" /usr/bin/google-chrome-stable; \
     ln -sf "$B" /usr/bin/chromium; \
     ln -sf "$B" /usr/bin/chromium-browser; \
-    "$B" --version; \
+    "$B" --version;
     
 # -----------------------------------------------------------------------------
 # 4) agent-browser（Vercel Labs，npm 全局）
