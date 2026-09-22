@@ -13,7 +13,10 @@
 #   3) Playwright(Python) + 共享浏览器路径
 #   4) agent-browser（npm 全局，版本与 Hermes 源码钉版一致）
 #   5) browser-use CLI（Hermes browser_exec 的后端，必须预装）
-#   6) 构建期自检（任一项失败即构建失败）
+#   6) 飞书 / Lark CLI（lark-cli，npm 全局装到 /usr/local/bin）
+#   7) 企业微信 CLI（wecom-cli，npm 全局装到 /usr/local/bin）
+#   8) （可选）chrome / google-chrome 别名 —— 默认保持注释
+#   9) 构建期自检（任一项失败即构建失败）
 # =============================================================================
 
 FROM nousresearch/hermes-agent:main
@@ -200,7 +203,70 @@ RUN set -eux; \
     browser-use --version || true
 
 # -----------------------------------------------------------------------------
-# 6) 可选：chrome/google-chrome 别名
+# 6) 飞书 / Lark CLI（lark-cli）
+#
+#   官方安装指引（open.feishu.cn，2026-09 核对）：
+#     npm install -g @larksuite/cli                          # CLI 本体（本层，进镜像）
+#     npx -y skills add https://open.feishu.cn --skill -y    # CLI skills（运行期执行一次）
+#     lark-cli config init --new                             # 绑定应用凭证（浏览器交互）
+#     lark-cli auth login --recommend                        # 登录授权（浏览器交互）
+#
+#   ⚠ 为什么必须装进 /usr/local/bin，而不是运行期挂载的卷里：
+#     /opt/data 是运行期挂载的 ZFS 卷，其中的 ~/.local/bin 并不在 Hermes 进程的
+#     PATH 内（实测 PATH=/usr/local/bin:/usr/bin:/bin）。把 lark-cli 装到 ~/.local
+#     等于没装：command -v lark-cli 找不到，lark-* skill 的 requires.bins 校验
+#     会判定缺失。与第 5 节 browser-use 是同一个坑。
+#     卷里 /opt/data/home/.local/bin/lark-cli 正是这种「装了但不可达」的残留，
+#     重建镜像后建议删掉那份，免得以后排查时看错版本。
+#
+#   ⚠ 本层需要构建期外网：npm 包只带一个 Node 壳，postinstall 用系统 curl 下载
+#     平台二进制（约 48MB）并做 SHA256 校验（校验清单随包发布），失败回退
+#     registry.npmmirror.com：
+#       https://github.com/larksuite/cli/releases/download/v<ver>/lark-cli-<ver>-linux-{amd64,arm64}.tar.gz
+#     系统 curl 已在基础镜像内（第 2 节也用到 curl）。linux-amd64 / linux-arm64
+#     官方都有产物，工作流里的双架构构建安全。装完镜像大约 +48MB。
+#
+#   ⚠ npm 11.17 实测：会打印一条 allow-scripts 警告但那一次仍执行了 postinstall
+#     （bin/lark-cli 48MB 确实生成）。若将来某版 npm 默认拦截安装脚本，二进制
+#     根本不会下载（连 bin/ 目录都不生成），本层末尾的 `lark-cli --version`
+#     会直接让构建失败——失败是响的，不会悄悄发一个坏镜像。届时的写法：
+#       npm install -g --allow-scripts=@larksuite/cli @larksuite/cli
+#     现在不写这个 flag，是因为旧版 npm 不认识它会直接报错。
+#
+#   ⚠ 版本跟随 npm latest（当前 1.0.96）：CLI 自带 _notice 升级提示，不钉版本
+#     可与运行期拉取的 skills 包保持同代；要钉就写 @larksuite/cli@1.0.96。
+#
+#   ⚠ 凭证与登录态刻意不进镜像：config init / auth login 都是浏览器交互，且落盘在
+#     运行期卷里（实测 $HOME/.lark-cli/hermes/config.json），换新卷就要重新授权。
+# -----------------------------------------------------------------------------
+RUN set -eux; \
+    npm install -g @larksuite/cli; \
+    lark-cli --version
+
+# -----------------------------------------------------------------------------
+# 7) 企业微信 CLI（wecom-cli）
+#
+#   官方安装指引（github.com/WecomTeam/wecom-cli，2026-09 核对）：
+#     npm install -g @wecom/cli                        # CLI 本体（本层，进镜像）
+#     npx skills add WecomTeam/wecom-cli -y -g         # CLI skills（运行期执行一次）
+#     wecom-cli auth init                              # 扫码授权（交互式，仅一次）
+#     wecom-cli auth show                              # 查看授权状态
+#
+#   ⚠ 分发方式与 lark-cli 不同：@wecom/cli 用 optionalDependencies 拆平台包
+#     （@wecom/cli-linux-x64 / -linux-arm64 / -darwin-arm64 / -darwin-x64 / -win32-x64，
+#      二进制约 11MB），没有 postinstall 下载脚本，装得快、不依赖 GitHub Releases；
+#     代价是 npm 必须允许安装可选依赖（不要加 --no-optional / --omit=optional）。
+#     linux-x64、linux-arm64 都在支持列表内，双架构构建安全。
+#
+#   ⚠ 授权是扫码交互（或 --manual 手输），只能在运行期人工完成，不进镜像；
+#     凭证/缓存落盘在运行期卷（实测 $HOME/.config/wecom），容器重建后保留。
+# -----------------------------------------------------------------------------
+RUN set -eux; \
+    npm install -g @wecom/cli; \
+    wecom-cli --version
+
+# -----------------------------------------------------------------------------
+# 8) 可选：chrome/google-chrome 别名
 #    当前容器 /opt/data/bin 里有一个运行期手工贴的悬空 wrapper：
 #        exec /opt/cloakbrowser/chromium-146.0.7680.177.5/chrome   (该路径不存在)
 #    若需要 chrome 命令可用，下面的真链接更可靠；若担心影响 agent-browser
@@ -213,7 +279,7 @@ RUN set -eux; \
 #     "$B" --version
 
 # -----------------------------------------------------------------------------
-# 7) 构建期自检：任一项失败即构建失败
+# 9) 构建期自检：任一项失败即构建失败
 #    覆盖真正会被用到的能力，而不仅是"文件存在"。
 # -----------------------------------------------------------------------------
 RUN set -eux; \
@@ -239,4 +305,10 @@ RUN set -eux; \
     echo "=== browser-use CLI ==="; \
     command -v browser-use; \
     browser-use --version || true; \
+    echo "=== 飞书 / Lark CLI ==="; \
+    command -v lark-cli; \
+    lark-cli --version; \
+    echo "=== 企业微信 CLI ==="; \
+    command -v wecom-cli; \
+    wecom-cli --version; \
     echo "image self-check OK"
