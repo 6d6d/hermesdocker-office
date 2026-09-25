@@ -215,11 +215,19 @@ RUN set -eux; \
 #       npm warn install-scripts  agent-browser@0.26.0 (postinstall: ...)
 #       /bin/sh: 1: agent-browser: not found   （exit 127）-> 构建失败
 #     旧基线的 npm 默认执行脚本，所以以前不写这个 flag 也没事。
-#     将来 npm 再改政策、报 unknown option 时，按 npm 的提示改名即可。
+#   ⚠ --prefix /usr/local 是第二个必须项（同一次基线漂移的两个独立原因）：
+#     新基线的 npm 由 pm 提供，`npm install -g` 默认把命令落到 pm 工具链目录下，
+#     那个目录不在 PATH 上，于是 `command -v agent-browser` 找不到（exit 127）。
+#     和 --allow-scripts 各管一半，缺一个都失败。写死 --prefix /usr/local 与旧
+#     基线行为一致，也与 README 里「所有命令都装在 /usr/local/bin」对齐。
+#
+#   ⚠ 失败时把 prefix / 目录内容打出来：这类 PATH 假设的坑再犯一次，日志里直接
+#     就有答案，不用再猜。
 # -----------------------------------------------------------------------------
 RUN set -eux; \
-    npm install -g --allow-scripts=agent-browser "agent-browser@^0.26.0"; \
-    command -v agent-browser; \
+    echo "npm prefix = $(npm config get prefix)"; \
+    npm install -g --allow-scripts=agent-browser --prefix /usr/local "agent-browser@^0.26.0"; \
+    command -v agent-browser || { echo "== agent-browser 未进 PATH，诊断 =="; ls -la /usr/local/bin | head -20; npm root -g; exit 1; }; \
     agent-browser --version
 
 # -----------------------------------------------------------------------------
@@ -283,8 +291,8 @@ RUN set -eux; \
 #     运行期卷里（实测 $HOME/.lark-cli/hermes/config.json），换新卷就要重新授权。
 # -----------------------------------------------------------------------------
 RUN set -eux; \
-    npm install -g --allow-scripts=@larksuite/cli @larksuite/cli; \
-    command -v lark-cli; \
+    npm install -g --allow-scripts=@larksuite/cli --prefix /usr/local @larksuite/cli; \
+    command -v lark-cli || { echo "== lark-cli 未进 PATH，诊断 =="; ls -la /usr/local/bin | head -20; npm root -g; exit 1; }; \
     lark-cli --version
 
 # -----------------------------------------------------------------------------
