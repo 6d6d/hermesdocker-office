@@ -121,10 +121,22 @@ RUN uv --version
 #   注意：上游 pyproject 的 feishu extra 声明的是 lark-oapi==1.6.8，
 #   要跟齐上游就把下面 1.7.3 换成 1.6.8。
 #
-# ⚠ 这两个包是 Hermes 的 telegram / feishu 平台依赖，基线镜像不含它们
-#   （属于 pyproject 的可选 extra，不在 [all] 里），所以必须在这里装。
+# ⚠ 这几个包是 Hermes 的平台 / 记忆依赖，基线镜像不含它们
+#   （属于 pyproject 的可选 extra，不在 [all] 里），所以必须在这里装：
+#     lark-oapi / python-telegram-bot —— feishu / telegram 平台
+#     mem0ai                          —— Mem0 记忆 provider（hermes memory setup 选 mem0）
+#
+# ⚠ mem0ai 的版本跟随 Hermes 自己钉的值（tools/lazy_deps.py 里
+#   "memory.mem0": ("mem0ai==2.0.10",)），不要自行升级。
+#   它会把 qdrant-client 一并带进来，OSS 模式的本地向量库（$HERMES_HOME/mem0_qdrant）
+#   因此开箱可用，不需要再装 qdrant 服务。
+#   装之前用 `uv pip install --dry-run` 对密封 venv 干跑过：只新增 10 个包
+#   （mem0ai / qdrant-client / numpy / sqlalchemy / posthog / portalocker /
+#     backoff / h2 / hpack / hyperframe），没有升级或降级任何既有依赖。
+#   若将来要改用 Ollama 做 LLM/embedder，还需补装 `ollama` 这个 pip 包。
 RUN uv pip install --python /opt/hermes/.venv/bin/python \
-      "lark-oapi==1.7.3" "python-telegram-bot==22.8"
+      "lark-oapi==1.7.3" "python-telegram-bot==22.8" \
+      "mem0ai==2.0.10"
 
 # -----------------------------------------------------------------------------
 # 1) 系统依赖
@@ -340,4 +352,6 @@ RUN set -eux; \
     lark-cli --version; \
     echo "=== 飞书 / Telegram Python 依赖（装进 Hermes 虚拟环境）==="; \
     /opt/hermes/.venv/bin/python -c "import lark_oapi, telegram; from importlib.metadata import version; print('lark-oapi', version('lark-oapi'), '/ python-telegram-bot', version('python-telegram-bot'), 'import OK')"; \
+    echo "=== Mem0 记忆 provider ==="; \
+    /opt/hermes/.venv/bin/python -c "import mem0, qdrant_client; from importlib.metadata import version; print('mem0ai', version('mem0ai'), '/ qdrant-client', version('qdrant-client'), 'import OK')"; \
     echo "image self-check OK"

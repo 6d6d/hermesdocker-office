@@ -20,6 +20,21 @@ agent-browser、browser-use，以及**飞书 / Lark 命令行工具**。
 所有命令都装在 `/usr/local/bin`（镜像层、在 PATH 上）。**不要**装到 `/opt/data/home/.local`：
 `~/.local/bin` 不在 Hermes 进程的 PATH 内，装了也 `command -v` 不到。
 
+## 镜像里预装的 Python 依赖（装进 Hermes 的虚拟环境）
+
+Hermes 的平台与记忆依赖不在基线镜像里（属于 `pyproject.toml` 的可选 extra，`[all]` 不含），
+所以在这里预装并钉版本：
+
+- `lark-oapi==1.7.3`、`python-telegram-bot==22.8` —— 飞书 / Telegram 平台依赖
+- `mem0ai==2.0.10` —— Mem0 记忆 provider（`hermes memory setup` 选 mem0）；随包带入
+  `qdrant-client`，「进程内 / OSS」模式的本地向量库（`$HERMES_HOME/mem0_qdrant`）开箱可用，
+  不需要另起 Qdrant 服务
+
+装法是 `uv pip install --python /opt/hermes/.venv/bin/python ...`：显式指向 Hermes 的虚拟环境，
+不让 uv 猜。版本跟随 Hermes 源码钉的值（`tools/lazy_deps.py`），不要自行升级。
+
+要用 Ollama 当 LLM / embedder 的话，还得补装 pip 包 `ollama`（镜像里没有 Ollama 本体）。
+
 ## 换新数据卷时要补的一步
 
 skills 包和授权凭证都是运行期内容（且授权需要浏览器交互），刻意不烤进镜像，也不受镜像更新影响。
