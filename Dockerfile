@@ -14,9 +14,8 @@
 #   4) agent-browser（npm 全局，版本与 Hermes 源码钉版一致）
 #   5) browser-use CLI（Hermes browser_exec 的后端，必须预装）
 #   6) 飞书 / Lark CLI（lark-cli，npm 全局装到 /usr/local/bin）
-#   7) 企业微信 CLI（wecom-cli，npm 全局装到 /usr/local/bin）
-#   8) （可选）chrome / google-chrome 别名 —— 默认保持注释
-#   9) 构建期自检（任一项失败即构建失败）
+#   7) （可选）chrome / google-chrome 别名 —— 默认保持注释
+#   8) 构建期自检（任一项失败即构建失败）
 # =============================================================================
 
 FROM nousresearch/hermes-agent:main
@@ -244,29 +243,7 @@ RUN set -eux; \
     lark-cli --version
 
 # -----------------------------------------------------------------------------
-# 7) 企业微信 CLI（wecom-cli）
-#
-#   官方安装指引（github.com/WecomTeam/wecom-cli，2026-09 核对）：
-#     npm install -g @wecom/cli                        # CLI 本体（本层，进镜像）
-#     npx skills add WecomTeam/wecom-cli -y -g         # CLI skills（运行期执行一次）
-#     wecom-cli auth init                              # 扫码授权（交互式，仅一次）
-#     wecom-cli auth show                              # 查看授权状态
-#
-#   ⚠ 分发方式与 lark-cli 不同：@wecom/cli 用 optionalDependencies 拆平台包
-#     （@wecom/cli-linux-x64 / -linux-arm64 / -darwin-arm64 / -darwin-x64 / -win32-x64，
-#      二进制约 11MB），没有 postinstall 下载脚本，装得快、不依赖 GitHub Releases；
-#     代价是 npm 必须允许安装可选依赖（不要加 --no-optional / --omit=optional）。
-#     linux-x64、linux-arm64 都在支持列表内，双架构构建安全。
-#
-#   ⚠ 授权是扫码交互（或 --manual 手输），只能在运行期人工完成，不进镜像；
-#     凭证/缓存落盘在运行期卷（实测 $HOME/.config/wecom），容器重建后保留。
-# -----------------------------------------------------------------------------
-RUN set -eux; \
-    npm install -g @wecom/cli; \
-    wecom-cli --version
-
-# -----------------------------------------------------------------------------
-# 8) 可选：chrome/google-chrome 别名
+# 7) 可选：chrome/google-chrome 别名
 #    当前容器 /opt/data/bin 里有一个运行期手工贴的悬空 wrapper：
 #        exec /opt/cloakbrowser/chromium-146.0.7680.177.5/chrome   (该路径不存在)
 #    若需要 chrome 命令可用，下面的真链接更可靠；若担心影响 agent-browser
@@ -279,7 +256,7 @@ RUN set -eux; \
 #     "$B" --version
 
 # -----------------------------------------------------------------------------
-# 9) 构建期自检：任一项失败即构建失败
+# 8) 构建期自检：任一项失败即构建失败
 #    覆盖真正会被用到的能力，而不仅是"文件存在"。
 # -----------------------------------------------------------------------------
 RUN set -eux; \
@@ -308,7 +285,4 @@ RUN set -eux; \
     echo "=== 飞书 / Lark CLI ==="; \
     command -v lark-cli; \
     lark-cli --version; \
-    echo "=== 企业微信 CLI ==="; \
-    command -v wecom-cli; \
-    wecom-cli --version; \
     echo "image self-check OK"
