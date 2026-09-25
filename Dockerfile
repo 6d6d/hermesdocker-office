@@ -208,9 +208,18 @@ RUN set -eux; \
 #      tools/browser_tool.py: AGENT_BROWSER_NPX_SPEC = "agent-browser@^0.26.0"
 #    对 0.x.y 而言 ^0.26.0 == >=0.26.0 <0.27.0，不会漂到最新的 0.37.x，
 #    避免与 Hermes 期望的 CLI 接口不一致。
+#
+#   ⚠ --allow-scripts 是必须的（2026-09-25 实测，与第 0.2 节同一次基线漂移）：
+#     新基线的 npm 默认拦截安装脚本，而 agent-browser 的可执行壳正是它的
+#     postinstall（node scripts/postinstall.js）生成的。被拦掉的表现：
+#       npm warn install-scripts  agent-browser@0.26.0 (postinstall: ...)
+#       /bin/sh: 1: agent-browser: not found   （exit 127）-> 构建失败
+#     旧基线的 npm 默认执行脚本，所以以前不写这个 flag 也没事。
+#     将来 npm 再改政策、报 unknown option 时，按 npm 的提示改名即可。
 # -----------------------------------------------------------------------------
 RUN set -eux; \
-    npm install -g "agent-browser@^0.26.0"; \
+    npm install -g --allow-scripts=agent-browser "agent-browser@^0.26.0"; \
+    command -v agent-browser; \
     agent-browser --version
 
 # -----------------------------------------------------------------------------
@@ -260,11 +269,12 @@ RUN set -eux; \
 #     官方都有产物，工作流里的双架构构建安全。装完镜像大约 +48MB。
 #
 #   ⚠ npm 11.17 实测：会打印一条 allow-scripts 警告但那一次仍执行了 postinstall
-#     （bin/lark-cli 48MB 确实生成）。若将来某版 npm 默认拦截安装脚本，二进制
-#     根本不会下载（连 bin/ 目录都不生成），本层末尾的 `lark-cli --version`
-#     会直接让构建失败——失败是响的，不会悄悄发一个坏镜像。届时的写法：
+#     （bin/lark-cli 48MB 确实生成）。2026-09-25 起基线漂移，新基线的 npm 改成
+#     默认拦截安装脚本，这一层果然照这句话失败：postinstall 不执行 -> 二进制不
+#     下载、连 bin/ 目录都不生成 -> 本层末尾 `lark-cli --version` 报 not found
+#     （exit 127），构建直接失败。所以 flag 现在是必须的：
 #       npm install -g --allow-scripts=@larksuite/cli @larksuite/cli
-#     现在不写这个 flag，是因为旧版 npm 不认识它会直接报错。
+#     老版 npm 不认识这个 flag，会直接报错；本镜像已按新基线写死。
 #
 #   ⚠ 版本跟随 npm latest（当前 1.0.96）：CLI 自带 _notice 升级提示，不钉版本
 #     可与运行期拉取的 skills 包保持同代；要钉就写 @larksuite/cli@1.0.96。
@@ -273,7 +283,8 @@ RUN set -eux; \
 #     运行期卷里（实测 $HOME/.lark-cli/hermes/config.json），换新卷就要重新授权。
 # -----------------------------------------------------------------------------
 RUN set -eux; \
-    npm install -g @larksuite/cli; \
+    npm install -g --allow-scripts=@larksuite/cli @larksuite/cli; \
+    command -v lark-cli; \
     lark-cli --version
 
 # -----------------------------------------------------------------------------
@@ -297,7 +308,7 @@ RUN set -eux; \
     echo "=== OfficeCLI ==="; \
     officecli --version; \
     echo "=== Python / Playwright ==="; \
-    python -c "import playwright, sys; print('playwright OK at', sys.executable)"; \
+    /opt/hermes/.venv/bin/python -c "import playwright, sys; print('playwright OK at', sys.executable)"; \
 #     echo "=== Chromium 二进制 ==="; \
 #     B="$(find /opt/ms-playwright -type f \( -name chrome -o -name headless_shell \) 2>/dev/null | head -1)"
 #     test -n "$B" || { echo "no chromium binary found"; ls -laR /opt/ms-playwright; exit 1; }
