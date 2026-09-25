@@ -15,6 +15,7 @@ agent-browser、browser-use，以及**飞书 / Lark 命令行工具**。
 | `agent-browser` | Vercel Labs | 版本与 Hermes 源码钉版一致（^0.26.0） |
 | `browser-use` | browser-use | Hermes `browser_exec` 的后端 |
 | `lark-cli` | `npm i -g @larksuite/cli` | 飞书 / Lark CLI |
+| `uv` | `ghcr.io/astral-sh/uv:0.11.6` | 基线镜像自 2026-09-25 起不再提供 uv，镜像自备一份 |
 
 所有命令都装在 `/usr/local/bin`（镜像层、在 PATH 上）。**不要**装到 `/opt/data/home/.local`：
 `~/.local/bin` 不在 Hermes 进程的 PATH 内，装了也 `command -v` 不到。

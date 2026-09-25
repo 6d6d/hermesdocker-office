@@ -74,6 +74,28 @@ ENV UV_EXCLUDE_NEWER=2027-12-31T23:59:59Z
 
 USER root
 
+# -----------------------------------------------------------------------------
+# 0.2) 自备一份 uv —— 不要指望基线镜像的 PATH
+#
+#   ⚠ 2026-09-25 实测结论（构建失败的直接原因）：
+#     `:main` 是移动标签。9/22 成功构建用的是摘要 sha256:cd6b026d…，今天 :main
+#     已是 sha256:90d156e1…；基线一变，下面所有层的缓存全部失效，下一节的
+#     `uv pip install` 重跑，于是撞上：
+#         RUN uv pip install ...   ->   uv: not found   （exit code 127）
+#     构建直接失败。这不是依赖解析问题，是基线不再提供 uv。
+#
+#     新基线为什么没有 uv：它改用 pm 统一管工具链，上游 Dockerfile 只把
+#     python3 / node / npm / ffmpeg / rg / npx 软链进 /usr/local/bin，uv 刻意
+#     不暴露——原文注释「build consumers receive Python environments, never an
+#     installer executable」。所以下游镜像必须自带一个 uv。
+#
+#   取自官方镜像 ghcr.io/astral-sh/uv（多架构 amd64/arm64，buildx 会按目标平台
+#   解析；已核对该 tag 的层里就是根目录下的 /uv 与 /uvx）。钉 tag 是为了可复现，
+#   换版本只改这一行。
+# -----------------------------------------------------------------------------
+COPY --from=ghcr.io/astral-sh/uv:0.11.6 /uv /usr/local/bin/uv
+RUN uv --version
+
 # 依赖安装。
 #
 # ⚠ 历史坑记录（这一层前后失败过多次，根因各不相同）：
@@ -82,15 +104,27 @@ USER root
 #   2) 字面路径 + `test -x ... || exit 1` 守卫 —— 守卫本身掩盖真实报错。
 #   3) 一长串诊断命令 —— 引入过多失败面。
 #   4) `--upgrade` —— 强制取最新版，最容易与基线镜像里已钉住的依赖冲突。
+#   5) 裸 `uv` —— 基线 2026-09-25 起不再把 uv 放 PATH（见第 0.2 节），
+#      报 `uv: not found`（exit 127）；已在第 0.2 节自带 uv 修掉。
 #
 # 退出码指纹（实测）：
 #   2 = 网络/路径/权限/解释器问题；1 = 依赖解析无解（No solution found）。
+#   127 = 命令不存在（缺 uv / 缺可执行文件）。
 #   所以看到 exit 1 就该去日志里搜 "No solution found when resolving dependencies"。
 #
-# 这里去掉 --upgrade：只在缺失时安装，已有则不动，避免和基线镜像打架。
-# 若确实需要升级到特定版本，请显式钉版本，例如：
-#   uv pip install "lark-oapi==1.7.3" "python-telegram-bot==22.8"
-RUN uv pip install --upgrade lark-oapi python-telegram-bot
+# ⚠ 显式 --python 写死字面路径，不让 uv 自己猜环境：
+#   旧基线里 uv 靠 cwd（WORKDIR /opt/hermes）发现 .venv 才装进 Hermes 的虚拟环境，
+#   基线将来再改 WORKDIR 就会装错地方。
+#
+# ⚠ 钉版本、去掉 --upgrade：与现有容器里实测可用的版本保持一致
+#   （lark-oapi 1.7.3 / python-telegram-bot 22.8）。
+#   注意：上游 pyproject 的 feishu extra 声明的是 lark-oapi==1.6.8，
+#   要跟齐上游就把下面 1.7.3 换成 1.6.8。
+#
+# ⚠ 这两个包是 Hermes 的 telegram / feishu 平台依赖，基线镜像不含它们
+#   （属于 pyproject 的可选 extra，不在 [all] 里），所以必须在这里装。
+RUN uv pip install --python /opt/hermes/.venv/bin/python \
+      "lark-oapi==1.7.3" "python-telegram-bot==22.8"
 
 # -----------------------------------------------------------------------------
 # 1) 系统依赖
@@ -285,4 +319,6 @@ RUN set -eux; \
     echo "=== 飞书 / Lark CLI ==="; \
     command -v lark-cli; \
     lark-cli --version; \
+    echo "=== 飞书 / Telegram Python 依赖（装进 Hermes 虚拟环境）==="; \
+    /opt/hermes/.venv/bin/python -c "import lark_oapi, telegram; from importlib.metadata import version; print('lark-oapi', version('lark-oapi'), '/ python-telegram-bot', version('python-telegram-bot'), 'import OK')"; \
     echo "image self-check OK"
