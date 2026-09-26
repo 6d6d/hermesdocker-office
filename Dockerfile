@@ -130,9 +130,7 @@ RUN uv --version
 #   （mem0ai / qdrant-client / numpy / sqlalchemy / posthog / portalocker /
 #     backoff / h2 / hpack / hyperframe），没有升级或降级任何既有依赖。
 #   若将来要改用 Ollama 做 LLM/embedder，还需补装 `ollama` 这个 pip 包。
-RUN uv pip install \
-      "lark-oapi==1.7.3" "python-telegram-bot==22.8" \
-      "mem0ai==2.0.10"
+RUN uv pip install "lark-oapi" "python-telegram-bot" "mem0ai"
 
 # -----------------------------------------------------------------------------
 # 1) 系统依赖
