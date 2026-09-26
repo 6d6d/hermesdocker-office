@@ -112,10 +112,6 @@ RUN uv --version
 #   127 = 命令不存在（缺 uv / 缺可执行文件）。
 #   所以看到 exit 1 就该去日志里搜 "No solution found when resolving dependencies"。
 #
-# ⚠ 显式 --python 写死字面路径，不让 uv 自己猜环境：
-#   旧基线里 uv 靠 cwd（WORKDIR /opt/hermes）发现 .venv 才装进 Hermes 的虚拟环境，
-#   基线将来再改 WORKDIR 就会装错地方。
-#
 # ⚠ 钉版本、去掉 --upgrade：与现有容器里实测可用的版本保持一致
 #   （lark-oapi 1.7.3 / python-telegram-bot 22.8）。
 #   注意：上游 pyproject 的 feishu extra 声明的是 lark-oapi==1.6.8，
@@ -134,7 +130,7 @@ RUN uv --version
 #   （mem0ai / qdrant-client / numpy / sqlalchemy / posthog / portalocker /
 #     backoff / h2 / hpack / hyperframe），没有升级或降级任何既有依赖。
 #   若将来要改用 Ollama 做 LLM/embedder，还需补装 `ollama` 这个 pip 包。
-RUN uv pip install --python /opt/hermes/.venv/bin/python \
+RUN uv pip install \
       "lark-oapi==1.7.3" "python-telegram-bot==22.8" \
       "mem0ai==2.0.10"
 
