@@ -251,12 +251,38 @@ RUN set -eux; \
 #      构建期写进 /opt/data/bin 的内容在运行期会被卷遮蔽，等于没装。
 #      Hermes 进程的 PATH 包含 /usr/local/bin，可被 PATH 探测命中；
 #      同理 ~/.local/bin 也落在卷里，不可用。
+#
+#    ⚠ 只设 UV_TOOL_BIN_DIR 是不够的 —— 必须同时设 UV_TOOL_DIR（2026-09-26 实测）：
+#      uv 只在 UV_TOOL_BIN_DIR 里放「软链」，工具的真实环境（venv + 二进制）默认落在
+#      $HOME/.local/share/uv/tools。构建期 HOME=/root，而运行期身份是 uid=10000(hermes)、
+#      /root 是 0700，穿不过去 —— 软链悬空、command -v 找不到，browser_exec 只能退回
+#      `uvx browser-use` 兜底（要运行期索引，正是本节要避开的那条路）。
+#      镜像里实测到的死链就是这种：
+#          /usr/local/bin/browser-use -> /root/.local/share/uv/tools/browser-use/bin/browser-use
+#      （当前运行容器里能力没坏，是因为卷里另有 /opt/data/bin/browser-use 一份可用副本；
+#        那是运行期手工装的，不随镜像走，不能算数。）
+#
+#      机制已用等价的 `uv tool install cowsay` 在本地验证：
+#          bin/ 里得到软链 -> $UV_TOOL_DIR/cowsay/bin/cowsay
+#      所以把 UV_TOOL_DIR 指到公共可读的 /usr/local/share/uv/tools，软链才有活目标，
+#      再 chmod -R a+rX 让 uid 10000 也能读/执行。
+#      （副作用：运行期 `uv tool install` 也会落到这里——镜像层，容器重建即丢。
+#        运行期要装工具就显式指定 UV_TOOL_DIR/UV_TOOL_BIN_DIR 或在卷里装。）
 # -----------------------------------------------------------------------------
 ENV UV_TOOL_BIN_DIR=/usr/local/bin
+ENV UV_TOOL_DIR=/usr/local/share/uv/tools
 RUN set -eux; \
     uv tool install browser-use; \
-    chmod -R a+rX /usr/local/bin; \
-    browser-use --version || true
+    chmod -R a+rX /usr/local/share/uv/tools /usr/local/bin; \
+    for b in browser-use browser browseruse bu browser-use-tui; do \
+      p="/usr/local/bin/$b"; \
+      [ -e "$p" ] || [ -L "$p" ] || continue; \
+      t="$(readlink -f "$p" 2>/dev/null || true)"; \
+      if [ -z "$t" ] || [ ! -e "$t" ]; then echo "$p 是悬空软链（readlink 无解析结果）"; exit 1; fi; \
+      case "$t" in /root/*) echo "$p -> $t ：指向 /root，运行期 uid 10000 穿不过去"; exit 1;; esac; \
+      echo "  $b -> $t"; \
+    done; \
+    browser-use --version || echo "（--version 未通过，软链本身已校验；能力实测留给运行期）"
 
 # -----------------------------------------------------------------------------
 # 6) 飞书 / Lark CLI（lark-cli）
@@ -340,6 +366,10 @@ RUN set -eux; \
     agent-browser --version; \
     echo "=== browser-use CLI ==="; \
     command -v browser-use; \
+    t="$(readlink -f /usr/local/bin/browser-use 2>/dev/null || true)"; \
+    if [ -z "$t" ] || [ ! -e "$t" ]; then echo "browser-use 软链悬空（readlink 无解析结果）"; exit 1; fi; \
+    case "$t" in /root/*) echo "browser-use -> $t ：指向 /root，运行期 uid 10000 穿不过去"; exit 1;; esac; \
+    echo "browser-use -> $t"; \
     browser-use --version || true; \
     echo "=== 飞书 / Lark CLI ==="; \
     command -v lark-cli; \
