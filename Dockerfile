@@ -390,7 +390,12 @@ RUN set -eux; \
 #      buildx 构建容器的 /dev/shm 默认只有 64 MB，chromium 起来后会立刻死掉，
 #      表现为 TargetClosedError: Browser.new_page（不是路径或 node 的问题——
 #      日志里 launch 已成功、playwright-node 软链也正常）。指向 /tmp 即可。
-#      运行期容器 /dev/shm 由宿主机给，实测正常，所以这只是自检用的 flag。
+#     运行期容器 /dev/shm 由宿主机给，实测正常，所以这只是自检用的 flag。
+#    ⚠ 为什么按 uname -m 判决（2026-10-03 实测）：CI 用 setup-qemu + 单个 x86 runner
+#      出双架构，arm64 那半是 QEMU 模拟执行，chromium 在模拟下必崩
+#      （GPU process launch failed: error_code=1002 -> TargetClosedError）；
+#      同一段冒烟在原生 amd64 上 11 秒通过。所以只让 x86_64 真判决，其它架构降为告警。
+#      若将来 CI 换成原生 arm64 runner，这里可以改成对两种架构都真判决。
 # -----------------------------------------------------------------------------
 RUN set -eux; \
     echo "=== OfficeCLI ==="; \
@@ -422,7 +427,13 @@ RUN set -eux; \
     echo "=== Playwright headless 冒烟（校验 PLAYWRIGHT_NODEJS_PATH 与两块浏览器齐备）==="; \
     readlink -f /usr/local/bin/playwright-node; \
     test -x "$(readlink -f /usr/local/bin/playwright-node)"; \
-    /opt/hermes/.venv/bin/python -c 'from playwright.sync_api import sync_playwright as s; p=s().start(); b=p.chromium.launch(headless=True, args=["--no-sandbox","--disable-dev-shm-usage"]); pg=b.new_page(); pg.set_content("<h1>zh 中文</h1>"); print("playwright headless OK", b.version); b.close(); p.stop()'; \
+    SMOKE='from playwright.sync_api import sync_playwright as s; p=s().start(); b=p.chromium.launch(headless=True, args=["--no-sandbox","--disable-dev-shm-usage"]); pg=b.new_page(); pg.set_content("<h1>zh 中文</h1>"); print("playwright headless OK", b.version); b.close(); p.stop()'; \
+    if [ "$(uname -m)" = "x86_64" ]; then \
+      /opt/hermes/.venv/bin/python -c "$SMOKE"; \
+    else \
+      echo "（$(uname -m) 构建：CI 对 arm64 走 QEMU 模拟，chromium 在模拟下起不来，故此冒烟只做告警）"; \
+      /opt/hermes/.venv/bin/python -c "$SMOKE" || echo "警告：$(uname -m) 下冒烟未通过（模拟环境，属预期）"; \
+    fi; \
     echo "=== 飞书 / Lark CLI ==="; \
     command -v lark-cli; \
     lark-cli --version; \
