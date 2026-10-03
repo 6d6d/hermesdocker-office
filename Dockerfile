@@ -205,6 +205,10 @@ ENV PLAYWRIGHT_BROWSERS_PATH=/opt/ms-playwright
 #      所以这里落一个稳定软链 /usr/local/bin/playwright-node 再指向它。
 #      同理 uv 的下载缓存（/root/.cache/uv）也留在层里没意义，一并清掉。
 #
+#   ⚠ 顺序有坑（2026-10-03 构建实测）：ENV 对整个 RUN 生效，所以软链必须在**同一层里
+#     第一条 playwright 命令之前**建好。先跑 `playwright install chromium` 再建软链的写法
+#     会直接失败：FileNotFoundError: '/usr/local/bin/playwright-node'。
+#
 #   ⚠ 不要删 chromium_headless_shell 来省体积：Playwright 在 headless 下默认就启动
 #      chrome-headless-shell，缺了它直接报 "Executable doesn't exist"，不会回退到完整
 #      chromium（2026-09-26 用 PLAYWRIGHT_BROWSERS_PATH 指向缺件目录实测过）。
@@ -212,15 +216,15 @@ ENV PLAYWRIGHT_BROWSERS_PATH=/opt/ms-playwright
 #      浏览器的工具会受影响，故两块都保留。
 ENV PLAYWRIGHT_NODEJS_PATH=/usr/local/bin/playwright-node
 RUN set -eux; \
-    uv pip install --exclude-newer-package "playwright=false" playwright; \
-    playwright install chromium; \
     NODE_BIN="$(command -v node || true)"; \
     if [ -z "$NODE_BIN" ]; then NODE_BIN="$(ls -d /opt/hermes/tools/node-*-linux-*/bin/node 2>/dev/null | head -1)"; fi; \
     test -x "$NODE_BIN"; \
     ln -sf "$NODE_BIN" /usr/local/bin/playwright-node; \
+    echo "playwright-node -> $(readlink -f /usr/local/bin/playwright-node)"; \
+    uv pip install --exclude-newer-package "playwright=false" playwright; \
+    playwright install chromium; \
     rm -f /opt/hermes/.venv/lib/python*/site-packages/playwright/driver/node; \
     uv cache clean || true; \
-    echo "playwright-node -> $(readlink -f /usr/local/bin/playwright-node)"; \
     chmod -R a+rX /opt/ms-playwright; \
     echo "--- installed chromium dirs ---"; \
     find /opt/ms-playwright -maxdepth 2 -type d -name 'chromium*' | head -n 5
