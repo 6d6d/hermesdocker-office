@@ -386,6 +386,11 @@ RUN set -eux; \
 # -----------------------------------------------------------------------------
 # 8) 构建期自检：任一项失败即构建失败
 #    覆盖真正会被用到的能力，而不仅是"文件存在"。
+#    ⚠ Playwright 冒烟为什么要带 --disable-dev-shm-usage（2026-10-03 实测）：
+#      buildx 构建容器的 /dev/shm 默认只有 64 MB，chromium 起来后会立刻死掉，
+#      表现为 TargetClosedError: Browser.new_page（不是路径或 node 的问题——
+#      日志里 launch 已成功、playwright-node 软链也正常）。指向 /tmp 即可。
+#      运行期容器 /dev/shm 由宿主机给，实测正常，所以这只是自检用的 flag。
 # -----------------------------------------------------------------------------
 RUN set -eux; \
     echo "=== OfficeCLI ==="; \
@@ -417,7 +422,7 @@ RUN set -eux; \
     echo "=== Playwright headless 冒烟（校验 PLAYWRIGHT_NODEJS_PATH 与两块浏览器齐备）==="; \
     readlink -f /usr/local/bin/playwright-node; \
     test -x "$(readlink -f /usr/local/bin/playwright-node)"; \
-    /opt/hermes/.venv/bin/python -c 'from playwright.sync_api import sync_playwright as s; p=s().start(); b=p.chromium.launch(headless=True, args=["--no-sandbox"]); pg=b.new_page(); pg.set_content("<h1>zh 中文</h1>"); print("playwright headless OK", b.version); b.close(); p.stop()'; \
+    /opt/hermes/.venv/bin/python -c 'from playwright.sync_api import sync_playwright as s; p=s().start(); b=p.chromium.launch(headless=True, args=["--no-sandbox","--disable-dev-shm-usage"]); pg=b.new_page(); pg.set_content("<h1>zh 中文</h1>"); print("playwright headless OK", b.version); b.close(); p.stop()'; \
     echo "=== 飞书 / Lark CLI ==="; \
     command -v lark-cli; \
     lark-cli --version; \
