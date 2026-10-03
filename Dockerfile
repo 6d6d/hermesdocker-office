@@ -137,11 +137,17 @@ RUN uv pip install "lark-oapi" "python-telegram-bot" "mem0ai"
 #    ⚠ 原版的 libssl3 在本镜像（Debian 13 trixie）里叫 libssl3t64，照抄装不上。
 #    下面这组是 Chromium 无头运行库。已用 ldd 实测：装完这两组后
 #    chromium / chrome-headless-shell 均无 "not found" 依赖，清单是完整的。
+#
+#    ⚠ 2026-09-26 精简：libicu-dev -> libicu76（只留运行库）。
+#      逐层量过体积：libicu-dev 带进来 43 MiB 静态库（libicudata.a 30.4 /
+#      libicui18n.a 8.8 / libicuuc.a 4.1）+ 4.8 MiB 头文件 + icu-devtools，
+#      这些只在「编译期」有用，本镜像运行期不编译任何东西；运行期需要的是
+#      libicu76 本身，保留。apt 解析出的 libicu76 版本与 libicu-dev 依赖的一致。
 # -----------------------------------------------------------------------------
 RUN set -eux; \
     apt-get update; \
     apt-get install -y --no-install-recommends \
-      libicu-dev \
+      libicu76 \
       libssl3t64 \
       zlib1g \
       libnss3 libnspr4 \
@@ -190,9 +196,31 @@ RUN officecli --version
 
 ENV PLAYWRIGHT_BROWSERS_PATH=/opt/ms-playwright
 # ENV PLAYWRIGHT_VERSION=1.62.0 "playwright==${PLAYWRIGHT_VERSION}"
+#
+#   ⚠ 2026-09-26 精简：用基线自带的 node 跑 Playwright driver，省掉 venv 里那份 node。
+#      playwright-python 的 wheel 自带一份 node 二进制（量过：driver/node = 120.7 MiB
+#      解压），只用于跑 driver.js。设为基线 node 后实测 headless 启动正常
+#      （基线 node 是 26.x，driver 是纯 JS，版本兼容）。
+#      基线 node 路径随基线 pm 版本变（/opt/hermes/tools/node-<ver>-linux-<arch>/bin/node），
+#      所以这里落一个稳定软链 /usr/local/bin/playwright-node 再指向它。
+#      同理 uv 的下载缓存（/root/.cache/uv）也留在层里没意义，一并清掉。
+#
+#   ⚠ 不要删 chromium_headless_shell 来省体积：Playwright 在 headless 下默认就启动
+#      chrome-headless-shell，缺了它直接报 "Executable doesn't exist"，不会回退到完整
+#      chromium（2026-09-26 用 PLAYWRIGHT_BROWSERS_PATH 指向缺件目录实测过）。
+#      反过来缺完整 chromium 它能跑 headless，但 /usr/bin/chrome* 别名与其他需要完整
+#      浏览器的工具会受影响，故两块都保留。
+ENV PLAYWRIGHT_NODEJS_PATH=/usr/local/bin/playwright-node
 RUN set -eux; \
     uv pip install --exclude-newer-package "playwright=false" playwright; \
     playwright install chromium; \
+    NODE_BIN="$(command -v node || true)"; \
+    if [ -z "$NODE_BIN" ]; then NODE_BIN="$(ls -d /opt/hermes/tools/node-*-linux-*/bin/node 2>/dev/null | head -1)"; fi; \
+    test -x "$NODE_BIN"; \
+    ln -sf "$NODE_BIN" /usr/local/bin/playwright-node; \
+    rm -f /opt/hermes/.venv/lib/python*/site-packages/playwright/driver/node; \
+    uv cache clean || true; \
+    echo "playwright-node -> $(readlink -f /usr/local/bin/playwright-node)"; \
     chmod -R a+rX /opt/ms-playwright; \
     echo "--- installed chromium dirs ---"; \
     find /opt/ms-playwright -maxdepth 2 -type d -name 'chromium*' | head -n 5
@@ -234,7 +262,16 @@ RUN set -eux; \
     echo "npm prefix = $(npm config get prefix)"; \
     npm install -g --allow-scripts=agent-browser --prefix /usr/local "agent-browser@^0.26.0"; \
     command -v agent-browser || { echo "== agent-browser 未进 PATH，诊断 =="; ls -la /usr/local/bin | head -20; npm root -g; exit 1; }; \
-    agent-browser --version
+    agent-browser --version; \
+    ls -la /usr/local/lib/node_modules/agent-browser/bin/ | head -12; \
+    rm -f /usr/local/lib/node_modules/agent-browser/bin/agent-browser-linux-musl-* \
+          /usr/local/lib/node_modules/agent-browser/bin/agent-browser-darwin-* \
+          /usr/local/lib/node_modules/agent-browser/bin/agent-browser-win32-*; \
+    echo "--- 精简后（只保留 linux-x64 / linux-arm64）---"; \
+    ls -la /usr/local/lib/node_modules/agent-browser/bin/; \
+    npm cache clean --force; \
+    rm -rf /root/.npm/_cacache /root/.npm/_logs; \
+    echo "npm 缓存已清（本层量到 31.5 MiB 的 _cacache）"
 
 # -----------------------------------------------------------------------------
 # 5) browser-use CLI —— Hermes browser_exec 的后端
@@ -325,7 +362,9 @@ RUN set -eux; \
 RUN set -eux; \
     npm install -g --allow-scripts=@larksuite/cli --prefix /usr/local @larksuite/cli; \
     command -v lark-cli || { echo "== lark-cli 未进 PATH，诊断 =="; ls -la /usr/local/bin | head -20; npm root -g; exit 1; }; \
-    lark-cli --version
+    lark-cli --version; \
+    npm cache clean --force; \
+    rm -rf /root/.npm/_cacache /root/.npm/_logs
 
 # -----------------------------------------------------------------------------
 # 7) 可选：chrome/google-chrome 别名
@@ -371,6 +410,10 @@ RUN set -eux; \
     case "$t" in /root/*) echo "browser-use -> $t ：指向 /root，运行期 uid 10000 穿不过去"; exit 1;; esac; \
     echo "browser-use -> $t"; \
     browser-use --version || true; \
+    echo "=== Playwright headless 冒烟（校验 PLAYWRIGHT_NODEJS_PATH 与两块浏览器齐备）==="; \
+    readlink -f /usr/local/bin/playwright-node; \
+    test -x "$(readlink -f /usr/local/bin/playwright-node)"; \
+    /opt/hermes/.venv/bin/python -c 'from playwright.sync_api import sync_playwright as s; p=s().start(); b=p.chromium.launch(headless=True, args=["--no-sandbox"]); pg=b.new_page(); pg.set_content("<h1>zh 中文</h1>"); print("playwright headless OK", b.version); b.close(); p.stop()'; \
     echo "=== 飞书 / Lark CLI ==="; \
     command -v lark-cli; \
     lark-cli --version; \
