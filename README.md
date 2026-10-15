@@ -7,6 +7,8 @@ agent-browser、browser-use，以及**飞书 / Lark 命令行工具**。
 - 构建：推 `main` 后由 `.github/workflows/build-image.yml` 自动构建（`linux/amd64` + `linux/arm64`，每 3 天一次定时重建）
 - 本地构建：`docker build -t hermes-officecli .`
 
+Office 文档处理仅使用 OfficeCLI，镜像不安装 LibreOffice 或旧版 Office 格式转换备用环境。构建自检会检查 LibreOffice 软件包、命令和标准安装目录，发现后即终止构建；OfficeCLI 所需的系统库、字体和浏览器保留。
+
 ## 镜像里已装好的命令行工具
 
 | 命令 | 来源 | 说明 |

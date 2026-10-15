@@ -168,6 +168,7 @@ ENV DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=0
 
 # -----------------------------------------------------------------------------
 # 2) OfficeCLI（原样保留）
+#    Office 文档处理仅安装 OfficeCLI，不安装 LibreOffice，也不配置其备用转换环境。
 #    官方安装脚本会在检测到 ~/.hermes 后一并下载 OfficeCLI 的 Hermes skill。
 #    后续将二进制放入系统 PATH，并把 skill 放进 Hermes 内置技能目录，
 #    容器启动时 Hermes 会同步它到 /opt/data/skills。
@@ -403,6 +404,14 @@ RUN set -eux; \
 RUN set -eux; \
     echo "=== OfficeCLI ==="; \
     officecli --version; \
+    echo "=== 确认未安装 LibreOffice ==="; \
+    LO_PACKAGES="$(dpkg-query -W -f='${Package} ${db:Status-Status}\n' 'libreoffice*' 2>/dev/null || true)"; \
+    case "$LO_PACKAGES" in *" installed"*) echo "禁止安装 LibreOffice：$LO_PACKAGES"; exit 1;; esac; \
+    if command -v libreoffice >/dev/null 2>&1 || command -v soffice >/dev/null 2>&1 \
+      || [ -d /usr/lib/libreoffice ] || [ -d /usr/share/libreoffice ]; then \
+      echo "镜像中发现 LibreOffice，构建终止"; exit 1; \
+    fi; \
+    echo "LibreOffice absent OK"; \
     echo "=== Python / Playwright ==="; \
     /opt/hermes/.venv/bin/python -c "import playwright, sys; print('playwright OK at', sys.executable)"; \
 #     echo "=== Chromium 二进制 ==="; \
