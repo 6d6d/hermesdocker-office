@@ -16,6 +16,7 @@
 #   6) 飞书 / Lark CLI（lark-cli，npm 全局装到 /usr/local/bin）
 #   7) （可选）chrome / google-chrome 别名 —— 默认保持注释
 #   8) 构建期自检（任一项失败即构建失败）
+#   9) 最终清理（仅缓存与构建临时文件，保留运行环境）
 # =============================================================================
 
 FROM nousresearch/hermes-agent:main
@@ -130,7 +131,9 @@ RUN uv --version
 #   （mem0ai / qdrant-client / numpy / sqlalchemy / posthog / portalocker /
 #     backoff / h2 / hpack / hyperframe），没有升级或降级任何既有依赖。
 #   若将来要改用 Ollama 做 LLM/embedder，还需补装 `ollama` 这个 pip 包。
-RUN uv pip install "lark-oapi" "python-telegram-bot" "mem0ai"
+# ⚠ 下载缓存必须在产生它的同一层处理；后续 RUN 删除不能缩小旧层。
+#   UV_NO_CACHE 仅对本次安装生效，不改变运行期 uv 的缓存策略。
+RUN UV_NO_CACHE=1 uv pip install "lark-oapi" "python-telegram-bot" "mem0ai"
 
 # -----------------------------------------------------------------------------
 # 1) 系统依赖
@@ -157,6 +160,7 @@ RUN set -eux; \
       libxext6 libxi6 libxtst6 libxcb1 \
       libasound2t64 libpango-1.0-0 libcairo2 \
       fonts-noto-cjk; \
+    apt-get clean; \
     rm -rf /var/lib/apt/lists/*
 
 # 明确使用完整全球化支持；不要设为 1，否则中文、日期与区域格式处理可能异常。
@@ -203,7 +207,7 @@ ENV PLAYWRIGHT_BROWSERS_PATH=/opt/ms-playwright
 #      （基线 node 是 26.x，driver 是纯 JS，版本兼容）。
 #      基线 node 路径随基线 pm 版本变（/opt/hermes/tools/node-<ver>-linux-<arch>/bin/node），
 #      所以这里落一个稳定软链 /usr/local/bin/playwright-node 再指向它。
-#      同理 uv 的下载缓存（/root/.cache/uv）也留在层里没意义，一并清掉。
+#      uv 安装使用临时缓存，安装结束自动回收，不把下载缓存留进镜像层。
 #
 #   ⚠ 顺序有坑（2026-10-03 构建实测）：ENV 对整个 RUN 生效，所以软链必须在**同一层里
 #     第一条 playwright 命令之前**建好。先跑 `playwright install chromium` 再建软链的写法
@@ -221,10 +225,9 @@ RUN set -eux; \
     test -x "$NODE_BIN"; \
     ln -sf "$NODE_BIN" /usr/local/bin/playwright-node; \
     echo "playwright-node -> $(readlink -f /usr/local/bin/playwright-node)"; \
-    uv pip install --exclude-newer-package "playwright=false" playwright; \
+    UV_NO_CACHE=1 uv pip install --exclude-newer-package "playwright=false" playwright; \
     playwright install chromium; \
     rm -f /opt/hermes/.venv/lib/python*/site-packages/playwright/driver/node; \
-    uv cache clean || true; \
     chmod -R a+rX /opt/ms-playwright; \
     echo "--- installed chromium dirs ---"; \
     find /opt/ms-playwright -maxdepth 2 -type d -name 'chromium*' | head -n 5
@@ -264,7 +267,7 @@ RUN set -eux; \
 # -----------------------------------------------------------------------------
 RUN set -eux; \
     echo "npm prefix = $(npm config get prefix)"; \
-    npm install -g --allow-scripts=agent-browser --prefix /usr/local "agent-browser@^0.26.0"; \
+    npm install -g --cache /tmp/hermes-build-npm --allow-scripts=agent-browser --prefix /usr/local "agent-browser@^0.26.0"; \
     command -v agent-browser || { echo "== agent-browser 未进 PATH，诊断 =="; ls -la /usr/local/bin | head -20; npm root -g; exit 1; }; \
     agent-browser --version; \
     ls -la /usr/local/lib/node_modules/agent-browser/bin/ | head -12; \
@@ -273,9 +276,9 @@ RUN set -eux; \
           /usr/local/lib/node_modules/agent-browser/bin/agent-browser-win32-*; \
     echo "--- 精简后（只保留 linux-x64 / linux-arm64）---"; \
     ls -la /usr/local/lib/node_modules/agent-browser/bin/; \
-    npm cache clean --force; \
-    rm -rf /root/.npm/_cacache /root/.npm/_logs; \
-    echo "npm 缓存已清（本层量到 31.5 MiB 的 _cacache）"
+    npm cache clean --force --cache /tmp/hermes-build-npm; \
+    rm -rf /tmp/hermes-build-npm; \
+    echo "npm 构建缓存已在本层清理"
 
 # -----------------------------------------------------------------------------
 # 5) browser-use CLI —— Hermes browser_exec 的后端
@@ -313,7 +316,7 @@ RUN set -eux; \
 ENV UV_TOOL_BIN_DIR=/usr/local/bin
 ENV UV_TOOL_DIR=/usr/local/share/uv/tools
 RUN set -eux; \
-    uv tool install browser-use; \
+    UV_NO_CACHE=1 uv tool install browser-use; \
     chmod -R a+rX /usr/local/share/uv/tools /usr/local/bin; \
     for b in browser-use browser browseruse bu browser-use-tui; do \
       p="/usr/local/bin/$b"; \
@@ -364,11 +367,11 @@ RUN set -eux; \
 #     运行期卷里（实测 $HOME/.lark-cli/hermes/config.json），换新卷就要重新授权。
 # -----------------------------------------------------------------------------
 RUN set -eux; \
-    npm install -g --allow-scripts=@larksuite/cli --prefix /usr/local @larksuite/cli; \
+    npm install -g --cache /tmp/hermes-build-npm --allow-scripts=@larksuite/cli --prefix /usr/local @larksuite/cli; \
     command -v lark-cli || { echo "== lark-cli 未进 PATH，诊断 =="; ls -la /usr/local/bin | head -20; npm root -g; exit 1; }; \
     lark-cli --version; \
-    npm cache clean --force; \
-    rm -rf /root/.npm/_cacache /root/.npm/_logs
+    npm cache clean --force --cache /tmp/hermes-build-npm; \
+    rm -rf /tmp/hermes-build-npm
 
 # -----------------------------------------------------------------------------
 # 7) 可选：chrome/google-chrome 别名
@@ -441,4 +444,18 @@ RUN set -eux; \
     /opt/hermes/.venv/bin/python -c "import lark_oapi, telegram; from importlib.metadata import version; print('lark-oapi', version('lark-oapi'), '/ python-telegram-bot', version('python-telegram-bot'), 'import OK')"; \
     echo "=== Mem0 记忆 provider ==="; \
     /opt/hermes/.venv/bin/python -c "import mem0, qdrant_client; from importlib.metadata import version; print('mem0ai', version('mem0ai'), '/ qdrant-client', version('qdrant-client'), 'import OK')"; \
-    echo "image self-check OK"
+    echo "image self-check OK"; \
+# -----------------------------------------------------------------------------
+# 9) 最终清理：与自检保持同一个 RUN，避免自检缓存进入新镜像层。
+#    仅列举可重建的缓存和已知构建临时文件，不扫 /tmp/* 或整个 HOME。
+#    OfficeCLI、Office 依赖、Python 环境、浏览器和 /opt/data 持久化数据均保留。
+#    ⚠ 末尾清理不能抵消旧层体积，所以 uv/npm 安装也必须在各自层避免留下缓存。
+# -----------------------------------------------------------------------------
+    apt-get clean; \
+    rm -rf /var/lib/apt/lists/* \
+      /root/.cache/uv /root/.cache/pip /root/.cache/go-build \
+      /root/.npm/_cacache /root/.npm/_logs /root/.npm/_npx \
+      /tmp/hermes-build-npm /tmp/node-compile-cache \
+      /tmp/playwright-artifacts-* /tmp/playwright_chromiumdev_profile-* \
+      /tmp/install-officecli.sh /tmp/officecli /tmp/officecli-SHA256SUMS; \
+    echo "image build cleanup OK"

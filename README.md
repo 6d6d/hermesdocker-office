@@ -55,3 +55,12 @@ lark-cli auth status
 
 > 旧的运行期安装残留（`/opt/data/home/.local/bin/lark-cli`）建议删掉，
 > 它不在 PATH 上、只是排查时容易看错版本。
+
+## 构建缓存与最终清理
+
+- uv 的三处依赖安装都使用命令级 `UV_NO_CACHE=1`，下载使用临时缓存并自动回收；运行期的缓存策略不变。
+- npm 安装使用专用目录 `/tmp/hermes-build-npm`，每次安装完成后在同一个 `RUN` 中删除。
+- 最后一段 `RUN` 先完成自检，再清理 apt 下载文件和索引、root 下的 uv/pip/Go 编译缓存及 npm 缓存，以及列明的安装临时文件、Node 编译缓存和 Playwright 临时目录。自检与清理在同一层，避免自检缓存进入镜像。
+- OfficeCLI、Office 文档处理依赖、Python 虚拟环境、已安装的工具和浏览器保留。
+
+Docker 镜像逐层保存文件，只在末尾删除前面层的缓存无法缩小前面的层，因此安装步骤本身也要避免留下缓存。此清理不访问 `/opt/data`，不会清理已有数据卷里的 Go 缓存、npx 工具、项目 `node_modules` 或 Hermes 管理的依赖环境；这些属于运行期数据。
