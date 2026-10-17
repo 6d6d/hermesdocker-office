@@ -401,7 +401,10 @@ RUN set -eux; \
 #      同一段冒烟在原生 amd64 上 11 秒通过。所以只让 x86_64 真判决，其它架构降为告警。
 #      若将来 CI 换成原生 arm64 runner，这里可以改成对两种架构都真判决。
 # -----------------------------------------------------------------------------
+#    ⚠ QEMU 下浏览器失败可能在 WORKDIR 写出 qemu_*.core；曾将 1.08 GiB
+#      崩溃转储带入 arm64 镜像。自检前禁用 core dump，末尾同层清理兜底。
 RUN set -eux; \
+    ulimit -c 0; \
     echo "=== OfficeCLI ==="; \
     officecli --version; \
     echo "=== 确认未安装 LibreOffice ==="; \
@@ -467,4 +470,6 @@ RUN set -eux; \
       /tmp/hermes-build-npm /tmp/node-compile-cache \
       /tmp/playwright-artifacts-* /tmp/playwright_chromiumdev_profile-* \
       /tmp/install-officecli.sh /tmp/officecli /tmp/officecli-SHA256SUMS; \
+    find /opt/hermes /tmp -maxdepth 1 -type f -name 'qemu_*.core' -print -delete; \
+    test -z "$(find /opt/hermes /tmp -maxdepth 1 -type f -name 'qemu_*.core' -print -quit)"; \
     echo "image build cleanup OK"
